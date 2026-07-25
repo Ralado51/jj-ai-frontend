@@ -1,0 +1,32 @@
+services:
+  jj-ai-frontend:
+    container_name: jj-ai-frontend
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.jjnetwork.com.br}
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.jjnetwork.com.br}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.jj-ai-frontend.rule=Host(`jjaiplatform.jjnetwork.com.br`)"
+      - "traefik.http.routers.jj-ai-frontend.entrypoints=websecure"
+      - "traefik.http.routers.jj-ai-frontend.tls=true"
+      - "traefik.http.routers.jj-ai-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.jj-ai-frontend.loadbalancer.server.port=3000"
+
+networks:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-proxy}
