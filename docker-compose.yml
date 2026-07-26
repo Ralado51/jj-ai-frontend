@@ -16,7 +16,7 @@ services:
     expose:
       - "3000"
     networks:
-      - jj-ai-platform
+      - jj-ai-network
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=jj-ai-platform_jj-ai-network"
