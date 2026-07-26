@@ -23,7 +23,7 @@ services:
       - "traefik.http.routers.jj-ai-frontend.rule=Host(`jjaiplatform.jjnetwork.com.br`)"
       - "traefik.http.routers.jj-ai-frontend.entrypoints=websecure"
       - "traefik.http.routers.jj-ai-frontend.tls=true"
-      - "traefik.http.routers.jj-ai-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.jj-ai-frontend.tls.certresolver=leresolver"
       - "traefik.http.services.jj-ai-frontend.loadbalancer.server.port=3000"
 
 networks:
