@@ -16,10 +16,10 @@ services:
     expose:
       - "3000"
     networks:
-      - proxy
+      - jj-ai-network
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=proxy"
+      - "traefik.docker.network=jj-ai-platform_jj-ai-network"
       - "traefik.http.routers.jj-ai-frontend.rule=Host(`jjaiplatform.jjnetwork.com.br`)"
       - "traefik.http.routers.jj-ai-frontend.entrypoints=websecure"
       - "traefik.http.routers.jj-ai-frontend.tls=true"
@@ -27,6 +27,6 @@ services:
       - "traefik.http.services.jj-ai-frontend.loadbalancer.server.port=3000"
 
 networks:
-  proxy:
+  jj-ai-network:
     external: true
-    name: ${TRAEFIK_NETWORK:-proxy}
+    name: jj-ai-platform_jj-ai-network
