@@ -2,6 +2,7 @@
 
 import axios from "axios";
 import {
+  Bot,
   Download,
   File,
   FileArchive,
@@ -149,12 +150,21 @@ export default function ProjectDocumentsPage() {
   return (
     <DashboardShell>
       <section className="mx-auto max-w-7xl space-y-6">
-        <div>
-          <Link href="/projects" className="text-sm font-medium text-secondary hover:underline">
-            Projetos
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <Link href="/projects" className="text-sm font-medium text-secondary hover:underline">
+              Projetos
+            </Link>
+            <h1 className="mt-2 font-[var(--font-manrope)] text-3xl font-bold tracking-tight">Documentos do projeto</h1>
+            <p className="mt-2 text-sm text-muted">Envie, consulte, baixe e remova arquivos vinculados a este projeto.</p>
+          </div>
+          <Link
+            href={`/projects/${projectId}/ai`}
+            className="flex h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white transition hover:opacity-90"
+          >
+            <Bot size={17} />
+            Abrir AI Workspace
           </Link>
-          <h1 className="mt-2 font-[var(--font-manrope)] text-3xl font-bold tracking-tight">Documentos do projeto</h1>
-          <p className="mt-2 text-sm text-muted">Envie, consulte, baixe e remova arquivos vinculados a este projeto.</p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
