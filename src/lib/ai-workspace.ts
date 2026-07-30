@@ -85,8 +85,8 @@ export async function askProject(projectId: string, question: string) {
 export async function streamProjectAnswer(
   projectId: string,
   question: string,
-  conversationId: string | undefined,
   onEvent: (event: RagStreamEvent) => void,
+  conversationId?: string,
 ) {
   const token = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
   const response = await fetch(`${API_BASE_URL}/api/v1/projects/${projectId}/ask/stream`, {
