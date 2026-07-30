@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownMessage } from "@/components/ai/markdown-message";
+import { PromptTemplateLibrary } from "@/components/ai/prompt-template-library";
 import { DashboardShell } from "@/components/dashboard-shell";
 import {
   addConversationMessage,
@@ -34,6 +35,7 @@ import {
   streamProjectAnswer,
   updateConversation,
 } from "@/lib/ai-workspace";
+import { PromptTemplate } from "@/lib/prompt-templates";
 
 type ChatMessage = {
   id: string;
@@ -71,6 +73,7 @@ export default function ProjectAiWorkspacePage() {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+  const [isTemplateLibraryOpen, setIsTemplateLibraryOpen] = useState(false);
   const [error, setError] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(true);
@@ -257,6 +260,12 @@ export default function ProjectAiWorkspacePage() {
     }
   }
 
+  function handleApplyTemplate(template: PromptTemplate) {
+    setQuestion(template.content);
+    setIsTemplateLibraryOpen(false);
+    setError("");
+  }
+
   async function handleCopy(message: ChatMessage) {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -294,6 +303,13 @@ export default function ProjectAiWorkspacePage() {
 
   return (
     <DashboardShell>
+      <PromptTemplateLibrary
+        projectId={projectId}
+        open={isTemplateLibraryOpen}
+        onClose={() => setIsTemplateLibraryOpen(false)}
+        onApply={handleApplyTemplate}
+      />
+
       <section className="mx-auto max-w-[1500px] space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -411,8 +427,13 @@ export default function ProjectAiWorkspacePage() {
               {error && <div className="mb-3 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</div>}
               <div className="rounded-2xl border bg-background p-3 focus-within:ring-2 focus-within:ring-primary/30">
                 <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Digite uma pergunta sobre os documentos do projeto..." rows={3} maxLength={2000} disabled={isLoading} className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-60" />
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <p className="text-xs text-muted">Enter envia · Shift+Enter cria uma nova linha</p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={() => setIsTemplateLibraryOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl border bg-elevated px-3 text-sm font-semibold transition hover:bg-surface disabled:opacity-50">
+                      <Sparkles size={16} className="text-secondary" /> Templates
+                    </button>
+                    <p className="text-xs text-muted">Enter envia · Shift+Enter cria uma nova linha</p>
+                  </div>
                   <button type="button" onClick={handleSubmit} disabled={isLoading || question.trim().length < 2} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
                     {isLoading ? <LoaderCircle className="animate-spin" size={16} /> : <Send size={16} />}{isLoading ? "Gerando" : "Enviar"}
                   </button>
