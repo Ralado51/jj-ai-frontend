@@ -3,13 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProjectAiWorkspacePage from "@/app/projects/[id]/ai/page";
 
-const listConversations = vi.fn();
-const createConversation = vi.fn();
-const getConversation = vi.fn();
-const addConversationMessage = vi.fn();
-const streamProjectAnswer = vi.fn();
-const updateConversation = vi.fn();
-const deleteConversation = vi.fn();
+const {
+  listConversations,
+  createConversation,
+  getConversation,
+  addConversationMessage,
+  streamProjectAnswer,
+  updateConversation,
+  deleteConversation,
+} = vi.hoisted(() => ({
+  listConversations: vi.fn(),
+  createConversation: vi.fn(),
+  getConversation: vi.fn(),
+  addConversationMessage: vi.fn(),
+  streamProjectAnswer: vi.fn(),
+  updateConversation: vi.fn(),
+  deleteConversation: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "project-1" }),
@@ -82,7 +92,7 @@ describe("AI Workspace page", () => {
 
     render(<ProjectAiWorkspacePage />);
 
-    expect(await screen.findByText("Existing conversation")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Existing conversation" })).toBeInTheDocument();
     expect(await screen.findByText("Persisted answer")).toBeInTheDocument();
     expect(listConversations).toHaveBeenCalledWith("project-1");
     expect(getConversation).toHaveBeenCalledWith("conversation-1");
@@ -168,13 +178,13 @@ describe("AI Workspace page", () => {
     render(<ProjectAiWorkspacePage />);
     await screen.findByText("Nenhuma conversa salva.");
 
-    fireEvent.change(screen.getByPlaceholderText("Digite uma pergunta sobre os documentos do projeto..."), {
-      target: { value: "Fail now" },
-    });
+    const textarea = screen.getByPlaceholderText("Digite uma pergunta sobre os documentos do projeto...");
+    fireEvent.change(textarea, { target: { value: "Fail now" } });
     fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
 
     expect(await screen.findByText("Streaming failed")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Enviar" })).toBeEnabled());
+    await waitFor(() => expect(textarea).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
   });
 
   it("copies a completed assistant response", async () => {
