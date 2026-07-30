@@ -15,6 +15,20 @@ type PromptTemplateLibraryProps = {
   onApply: (template: PromptTemplate) => void;
 };
 
+type VariableValues = Record<string, string>;
+
+function buildInitialValues(template: PromptTemplate | null): VariableValues {
+  if (!template) return {};
+  return Object.fromEntries(template.variables.map((variable) => [variable, ""]));
+}
+
+function interpolateTemplate(content: string, values: VariableValues): string {
+  return Object.entries(values).reduce((result, [variable, value]) => {
+    const pattern = new RegExp(`{{\\s*${variable.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*}}`, "g");
+    return result.replace(pattern, value.trim());
+  }, content);
+}
+
 export function PromptTemplateLibrary({
   projectId,
   open,
@@ -26,6 +40,7 @@ export function PromptTemplateLibrary({
   const [category, setCategory] = useState("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [selected, setSelected] = useState<PromptTemplate | null>(null);
+  const [variableValues, setVariableValues] = useState<VariableValues>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,7 +55,9 @@ export function PromptTemplateLibrary({
         const items = await listPromptTemplates({ projectId });
         if (!cancelled) {
           setTemplates(items);
-          setSelected((current) => current ?? items[0] ?? null);
+          const initial = items[0] ?? null;
+          setSelected(initial);
+          setVariableValues(buildInitialValues(initial));
         }
       } catch {
         if (!cancelled) setError("Não foi possível carregar os templates.");
@@ -73,6 +90,36 @@ export function PromptTemplateLibrary({
     });
   }, [category, favoritesOnly, query, templates]);
 
+  const missingVariables = useMemo(
+    () => selected?.variables.filter((variable) => !variableValues[variable]?.trim()) ?? [],
+    [selected, variableValues],
+  );
+
+  const preview = useMemo(
+    () => (selected ? interpolateTemplate(selected.content, variableValues) : ""),
+    [selected, variableValues],
+  );
+
+  function selectTemplate(template: PromptTemplate) {
+    setSelected(template);
+    setVariableValues(buildInitialValues(template));
+    setError("");
+  }
+
+  function updateVariable(variable: string, value: string) {
+    setVariableValues((current) => ({ ...current, [variable]: value }));
+  }
+
+  function applySelectedTemplate() {
+    if (!selected) return;
+    if (missingVariables.length > 0) {
+      setError("Preencha todas as variáveis antes de usar o template.");
+      return;
+    }
+
+    onApply({ ...selected, content: preview });
+  }
+
   async function toggleFavorite(template: PromptTemplate) {
     const previous = templates;
     const nextFavorite = !template.is_favorite;
@@ -96,18 +143,18 @@ export function PromptTemplateLibrary({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Biblioteca de templates">
-      <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border bg-surface shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border bg-surface shadow-2xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <h2 className="font-[var(--font-manrope)] text-xl font-bold">Biblioteca de templates</h2>
-            <p className="mt-1 text-xs text-muted">Escolha um prompt reutilizável para começar mais rápido.</p>
+            <p className="mt-1 text-xs text-muted">Escolha um prompt e personalize as variáveis antes de aplicar.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg hover:bg-elevated" aria-label="Fechar biblioteca">
             <X size={18} />
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col border-r">
             <div className="space-y-3 border-b p-4">
               <label className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2">
@@ -136,7 +183,7 @@ export function PromptTemplateLibrary({
                 filteredTemplates.map((template) => (
                   <div key={template.id} className={`mb-1 rounded-xl border p-3 ${selected?.id === template.id ? "border-primary bg-primary/10" : "border-transparent hover:bg-elevated"}`}>
                     <div className="flex items-start gap-2">
-                      <button type="button" onClick={() => setSelected(template)} className="min-w-0 flex-1 text-left">
+                      <button type="button" onClick={() => selectTemplate(template)} className="min-w-0 flex-1 text-left">
                         <p className="truncate text-sm font-semibold">{template.name}</p>
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">{template.description || template.content}</p>
                       </button>
@@ -153,26 +200,41 @@ export function PromptTemplateLibrary({
           <div className="min-h-0 overflow-y-auto p-5">
             {selected ? (
               <div className="flex min-h-full flex-col">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 text-secondary"><Sparkles size={17} /><span className="text-xs font-semibold uppercase tracking-wide">{selected.category}</span></div>
-                    <h3 className="mt-3 font-[var(--font-manrope)] text-2xl font-bold">{selected.name}</h3>
-                    {selected.description && <p className="mt-2 text-sm leading-6 text-muted">{selected.description}</p>}
-                  </div>
-                </div>
-                <pre className="mt-5 whitespace-pre-wrap rounded-2xl border bg-background p-4 text-sm leading-6 text-foreground">{selected.content}</pre>
+                <div className="flex items-center gap-2 text-secondary"><Sparkles size={17} /><span className="text-xs font-semibold uppercase tracking-wide">{selected.category}</span></div>
+                <h3 className="mt-3 font-[var(--font-manrope)] text-2xl font-bold">{selected.name}</h3>
+                {selected.description && <p className="mt-2 text-sm leading-6 text-muted">{selected.description}</p>}
+
                 {selected.variables.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Variáveis</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {selected.variables.map((variable) => <span key={variable} className="rounded-lg border bg-elevated px-2.5 py-1 font-mono text-xs">{`{{${variable}}}`}</span>)}
+                  <div className="mt-5 rounded-2xl border bg-elevated/40 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted">Personalize o conteúdo</p>
+                    <div className="mt-4 grid gap-4 md:grid-cols-2">
+                      {selected.variables.map((variable) => (
+                        <label key={variable} className="space-y-2">
+                          <span className="text-sm font-semibold capitalize">{variable.replaceAll("_", " ")}</span>
+                          <textarea
+                            value={variableValues[variable] ?? ""}
+                            onChange={(event) => updateVariable(variable, event.target.value)}
+                            placeholder={`Informe ${variable.replaceAll("_", " ")}`}
+                            rows={variable === "conteudo" || variable === "contexto" ? 4 : 2}
+                            className="w-full resize-y rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                          />
+                        </label>
+                      ))}
                     </div>
                   </div>
                 )}
+
+                <div className="mt-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Prévia do prompt</p>
+                  <pre className="mt-2 whitespace-pre-wrap rounded-2xl border bg-background p-4 text-sm leading-6 text-foreground">{preview}</pre>
+                </div>
+
                 {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
                 <div className="mt-auto flex justify-end gap-3 pt-6">
                   <button type="button" onClick={onClose} className="h-10 rounded-xl border px-4 text-sm font-semibold hover:bg-elevated">Cancelar</button>
-                  <button type="button" onClick={() => onApply(selected)} className="h-10 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white hover:opacity-90">Usar template</button>
+                  <button type="button" onClick={applySelectedTemplate} disabled={missingVariables.length > 0} className="h-10 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+                    Usar template
+                  </button>
                 </div>
               </div>
             ) : (
