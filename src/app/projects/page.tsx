@@ -1,7 +1,7 @@
 "use client";
 
 import axios from "axios";
-import { Archive, Boxes, FileText, LoaderCircle, Plus, Search } from "lucide-react";
+import { Archive, Bot, Boxes, FileText, LoaderCircle, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -182,14 +182,17 @@ export default function ProjectsPage() {
                 <h2 className="mt-5 font-[var(--font-manrope)] text-xl font-bold">{project.name}</h2>
                 <p className="mt-1 font-mono text-xs text-secondary">{project.slug}</p>
                 <p className="mt-4 min-h-10 text-sm leading-5 text-muted">{project.description || "Sem descrição cadastrada."}</p>
-                <div className="mt-5 flex items-center justify-between gap-3 border-t pt-4">
+                <div className="mt-5 grid grid-cols-2 gap-2 border-t pt-4">
+                  <Link href={`/projects/${project.id}/ai`} className="flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-3 text-sm font-semibold text-white transition hover:opacity-90">
+                    <Bot size={16} /> AI Workspace
+                  </Link>
+                  <Link href={`/projects/${project.id}/documents`} className="flex h-10 items-center justify-center gap-2 rounded-xl border bg-elevated px-3 text-sm font-medium transition hover:border-primary/40 hover:text-secondary">
+                    <FileText size={16} /> Conhecimento
+                  </Link>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3">
                   <p className="text-xs text-muted">Criado em {new Date(project.created_at).toLocaleDateString("pt-BR")}</p>
-                  <div className="flex items-center gap-3">
-                    <Link href={`/projects/${project.id}/documents`} className="flex items-center gap-1.5 text-xs font-medium text-secondary hover:text-foreground">
-                      <FileText size={15} /> Documentos
-                    </Link>
-                    {canArchive && project.is_active && <button type="button" onClick={() => void handleArchive(project)} className="flex items-center gap-1.5 text-xs font-medium text-red-300 hover:text-red-200"><Archive size={15} /> Arquivar</button>}
-                  </div>
+                  {canArchive && project.is_active && <button type="button" onClick={() => void handleArchive(project)} className="flex items-center gap-1.5 text-xs font-medium text-red-300 hover:text-red-200"><Archive size={15} /> Arquivar</button>}
                 </div>
               </article>
             ))}
