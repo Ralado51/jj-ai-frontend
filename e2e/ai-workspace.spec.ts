@@ -145,7 +145,7 @@ test("login, project navigation, AI streaming, history and logout", async ({ pag
   await expect(page.getByText("RAG recupera contexto relevante.")).toBeVisible();
   await expect(page.getByText("Architecture.pdf")).toBeVisible();
   await expect(page.getByText("0.930")).toBeVisible();
-  await expect(page.getByText("Como funciona o RAG?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Como funciona o RAG?" })).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Como funciona o RAG?" })).toBeVisible();
