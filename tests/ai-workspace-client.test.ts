@@ -11,10 +11,12 @@ import {
   updateConversation,
 } from "@/lib/ai-workspace";
 
-const apiGet = vi.fn();
-const apiPost = vi.fn();
-const apiPatch = vi.fn();
-const apiDelete = vi.fn();
+const { apiGet, apiPost, apiPatch, apiDelete } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
+  apiPatch: vi.fn(),
+  apiDelete: vi.fn(),
+}));
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
