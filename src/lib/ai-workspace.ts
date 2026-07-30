@@ -1,7 +1,6 @@
-import { api } from "@/lib/api";
+import { api, AUTH_EXPIRED_EVENT, TOKEN_KEY } from "@/lib/api";
 
 const RAG_REQUEST_TIMEOUT_MS = 190_000;
-const TOKEN_KEY = "jj_ai_access_token";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.jjnetwork.com.br";
 
 export type RagSource = {
@@ -32,36 +31,6 @@ export type RagAnswerResponse = {
   embedding_model: string;
   metrics: RagExecutionMetrics;
   sources: RagSource[];
-};
-
-export type ConversationMessage = {
-  id: string;
-  conversation_id: string;
-  role: "user" | "assistant";
-  content: string;
-  model: string | null;
-  created_at: string;
-};
-
-export type Conversation = {
-  id: string;
-  project_id: string;
-  user_id: string;
-  title: string;
-  is_favorite: boolean;
-  created_at: string;
-  updated_at: string;
-  messages: ConversationMessage[];
-};
-
-export type ConversationListItem = Pick<
-  Conversation,
-  "id" | "project_id" | "title" | "is_favorite" | "created_at" | "updated_at"
->;
-
-export type ConversationListResponse = {
-  total: number;
-  items: ConversationListItem[];
 };
 
 export type RagStreamMetadataEvent = {
@@ -97,64 +66,11 @@ export type RagStreamEvent =
   | RagStreamDoneEvent
   | RagStreamErrorEvent;
 
-export async function listConversations(projectId: string) {
-  const response = await api.get<ConversationListResponse>(
-    `/api/v1/projects/${projectId}/conversations`,
-  );
-  return response.data;
-}
-
-export async function createConversation(projectId: string, title?: string) {
-  const response = await api.post<Conversation>(
-    `/api/v1/projects/${projectId}/conversations`,
-    { title },
-  );
-  return response.data;
-}
-
-export async function getConversation(conversationId: string) {
-  const response = await api.get<Conversation>(
-    `/api/v1/conversations/${conversationId}`,
-  );
-  return response.data;
-}
-
-export async function updateConversation(
-  conversationId: string,
-  data: { title?: string; is_favorite?: boolean },
-) {
-  const response = await api.patch<Conversation>(
-    `/api/v1/conversations/${conversationId}`,
-    data,
-  );
-  return response.data;
-}
-
-export async function deleteConversation(conversationId: string) {
-  await api.delete(`/api/v1/conversations/${conversationId}`);
-}
-
-export async function addConversationMessage(
-  conversationId: string,
-  data: { role: "user" | "assistant"; content: string; model?: string },
-) {
-  const response = await api.post<Conversation>(
-    `/api/v1/conversations/${conversationId}/messages`,
-    data,
-  );
-  return response.data;
-}
-
-export async function askProject(
-  projectId: string,
-  question: string,
-  conversationId?: string,
-) {
+export async function askProject(projectId: string, question: string) {
   const response = await api.post<RagAnswerResponse>(
     `/api/v1/projects/${projectId}/ask`,
     {
       question,
-      conversation_id: conversationId,
       top_k: 5,
       min_score: 0.2,
     },
@@ -169,8 +85,8 @@ export async function askProject(
 export async function streamProjectAnswer(
   projectId: string,
   question: string,
-  conversationId: string | undefined,
   onEvent: (event: RagStreamEvent) => void,
+  conversationId?: string,
 ) {
   const token = typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_KEY) : null;
   const response = await fetch(`${API_BASE_URL}/api/v1/projects/${projectId}/ask/stream`, {
@@ -190,6 +106,12 @@ export async function streamProjectAnswer(
   });
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.localStorage.removeItem(TOKEN_KEY);
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+      throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+    }
+
     let detail = "Não foi possível consultar a IA deste projeto.";
     try {
       const payload = await response.json();
