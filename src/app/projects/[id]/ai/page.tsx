@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { MarkdownMessage } from "@/components/ai/markdown-message";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { askProject, RagExecutionMetrics, RagSource } from "@/lib/ai-workspace";
 
@@ -187,7 +188,11 @@ export default function ProjectAiWorkspacePage() {
                           : "border bg-elevated text-foreground"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      {message.role === "assistant" ? (
+                        <MarkdownMessage content={message.content} />
+                      ) : (
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                      )}
                       {message.role === "assistant" && (
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-[11px] text-muted">
                           <div className="flex flex-wrap items-center gap-2">
