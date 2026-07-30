@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Lint and build
+    name: Test and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -31,6 +31,9 @@ jobs:
       - name: Lint (informational)
         continue-on-error: true
         run: npm run lint
+
+      - name: Run unit tests
+        run: npm test
 
       - name: Build
         run: npm run build
