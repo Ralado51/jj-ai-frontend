@@ -1,6 +1,5 @@
 "use client";
 
-import axios from "axios";
 import {
   Bot,
   Check,
@@ -19,7 +18,11 @@ import { useParams } from "next/navigation";
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { MarkdownMessage } from "@/components/ai/markdown-message";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { askProject, RagExecutionMetrics, RagSource } from "@/lib/ai-workspace";
+import {
+  RagExecutionMetrics,
+  RagSource,
+  streamProjectAnswer,
+} from "@/lib/ai-workspace";
 
 type ChatMessage = {
   id: string;
@@ -29,6 +32,7 @@ type ChatMessage = {
   model?: string;
   metrics?: RagExecutionMetrics;
   question?: string;
+  isStreaming?: boolean;
 };
 
 function formatDuration(milliseconds?: number) {
@@ -67,35 +71,83 @@ export default function ProjectAiWorkspacePage() {
     const normalizedQuestion = rawQuestion.trim();
     if (!normalizedQuestion || isLoading) return;
 
+    const assistantMessageId = crypto.randomUUID();
     setMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: "user", content: normalizedQuestion },
+      {
+        id: assistantMessageId,
+        role: "assistant",
+        content: "",
+        question: normalizedQuestion,
+        isStreaming: true,
+      },
     ]);
     setQuestion("");
     setError("");
     setIsLoading(true);
 
     try {
-      const response = await askProject(projectId, normalizedQuestion);
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: response.answer,
-          sources: response.sources,
-          model: response.chat_model,
-          metrics: response.metrics,
-          question: normalizedQuestion,
-        },
-      ]);
-      setSourcesOpen(true);
+      await streamProjectAnswer(projectId, normalizedQuestion, (event) => {
+        if (event.type === "metadata") {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    model: event.chat_model,
+                    sources: event.sources,
+                  }
+                : message,
+            ),
+          );
+          setSourcesOpen(true);
+          return;
+        }
+
+        if (event.type === "token") {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId
+                ? { ...message, content: `${message.content}${event.content}` }
+                : message,
+            ),
+          );
+          return;
+        }
+
+        if (event.type === "done") {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantMessageId
+                ? {
+                    ...message,
+                    content: event.answer,
+                    metrics: event.metrics,
+                    isStreaming: false,
+                  }
+                : message,
+            ),
+          );
+          return;
+        }
+
+        if (event.type === "error") {
+          throw new Error(event.detail);
+        }
+      });
     } catch (requestError) {
-      if (axios.isAxiosError(requestError)) {
-        setError(requestError.response?.data?.detail ?? "Não foi possível consultar a IA deste projeto.");
-      } else {
-        setError("Não foi possível consultar a IA deste projeto.");
-      }
+      const detail = requestError instanceof Error
+        ? requestError.message
+        : "Não foi possível consultar a IA deste projeto.";
+      setError(detail);
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === assistantMessageId
+            ? { ...message, isStreaming: false }
+            : message,
+        ),
+      );
     } finally {
       setIsLoading(false);
     }
@@ -135,7 +187,7 @@ export default function ProjectAiWorkspacePage() {
           </div>
           <div className="flex items-center gap-2 rounded-xl border bg-surface px-4 py-2 text-sm text-muted">
             <Sparkles size={16} className="text-secondary" />
-            Chat RAG do projeto
+            Respostas em tempo real
           </div>
         </div>
 
@@ -169,7 +221,7 @@ export default function ProjectAiWorkspacePage() {
                     </div>
                     <h3 className="mt-5 font-[var(--font-manrope)] text-2xl font-bold">Pergunte sobre seus documentos</h3>
                     <p className="mt-3 text-sm leading-6 text-muted">
-                      As respostas serão geradas somente com base no conteúdo indexado neste projeto.
+                      A resposta aparecerá enquanto o modelo processa o conhecimento do projeto.
                     </p>
                   </div>
                 </div>
@@ -189,11 +241,23 @@ export default function ProjectAiWorkspacePage() {
                       }`}
                     >
                       {message.role === "assistant" ? (
-                        <MarkdownMessage content={message.content} />
+                        message.content ? (
+                          <div>
+                            <MarkdownMessage content={message.content} />
+                            {message.isStreaming && (
+                              <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-secondary align-middle" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-muted">
+                            <LoaderCircle className="animate-spin text-secondary" size={16} />
+                            Buscando fontes e iniciando resposta
+                          </div>
+                        )
                       ) : (
                         <p className="whitespace-pre-wrap">{message.content}</p>
                       )}
-                      {message.role === "assistant" && (
+                      {message.role === "assistant" && !message.isStreaming && message.content && (
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-[11px] text-muted">
                           <div className="flex flex-wrap items-center gap-2">
                             {message.model && <span>Modelo: {message.model}</span>}
@@ -232,13 +296,6 @@ export default function ProjectAiWorkspacePage() {
                   </article>
                 ))
               )}
-
-              {isLoading && (
-                <div className="flex items-center gap-3 text-sm text-muted">
-                  <LoaderCircle className="animate-spin text-secondary" size={19} />
-                  Consultando documentos e gerando resposta
-                </div>
-              )}
               <div ref={messagesEndRef} />
             </div>
 
@@ -264,7 +321,7 @@ export default function ProjectAiWorkspacePage() {
                     className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isLoading ? <LoaderCircle className="animate-spin" size={16} /> : <Send size={16} />}
-                    Enviar
+                    {isLoading ? "Gerando" : "Enviar"}
                   </button>
                 </div>
               </div>
@@ -279,7 +336,7 @@ export default function ProjectAiWorkspacePage() {
             >
               <div>
                 <h2 className="font-[var(--font-manrope)] text-xl font-bold">Fontes</h2>
-                <p className="mt-1 text-xs text-muted">Trechos usados na resposta mais recente.</p>
+                <p className="mt-1 text-xs text-muted">Trechos recuperados para a resposta atual.</p>
               </div>
               <span className="xl:hidden">{sourcesOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
             </button>
