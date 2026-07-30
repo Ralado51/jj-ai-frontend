@@ -1,12 +1,24 @@
 "use client";
 
 import axios from "axios";
-import { Bot, FileText, LoaderCircle, Send, Sparkles, User } from "lucide-react";
+import {
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clipboard,
+  FileText,
+  LoaderCircle,
+  RotateCcw,
+  Send,
+  Sparkles,
+  User,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { KeyboardEvent, useMemo, useState } from "react";
+import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { askProject, RagSource } from "@/lib/ai-workspace";
+import { askProject, RagExecutionMetrics, RagSource } from "@/lib/ai-workspace";
 
 type ChatMessage = {
   id: string;
@@ -14,7 +26,20 @@ type ChatMessage = {
   content: string;
   sources?: RagSource[];
   model?: string;
+  metrics?: RagExecutionMetrics;
+  question?: string;
 };
+
+function formatDuration(milliseconds?: number) {
+  if (milliseconds === undefined) return null;
+  if (milliseconds < 1000) return `${milliseconds} ms`;
+  return `${(milliseconds / 1000).toFixed(1)} s`;
+}
+
+function formatConfidence(value?: number) {
+  if (value === undefined) return null;
+  return `${Math.round(value * 100)}%`;
+}
 
 export default function ProjectAiWorkspacePage() {
   const params = useParams<{ id: string }>();
@@ -23,14 +48,22 @@ export default function ProjectAiWorkspacePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const latestSources = useMemo(
-    () => [...messages].reverse().find((message) => message.role === "assistant" && message.sources?.length)?.sources ?? [],
+  const latestAssistantMessage = useMemo(
+    () => [...messages].reverse().find((message) => message.role === "assistant"),
     [messages],
   );
+  const latestSources = latestAssistantMessage?.sources ?? [];
 
-  async function handleSubmit() {
-    const normalizedQuestion = question.trim();
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, isLoading]);
+
+  async function submitQuestion(rawQuestion: string) {
+    const normalizedQuestion = rawQuestion.trim();
     if (!normalizedQuestion || isLoading) return;
 
     setMessages((current) => [
@@ -51,8 +84,11 @@ export default function ProjectAiWorkspacePage() {
           content: response.answer,
           sources: response.sources,
           model: response.chat_model,
+          metrics: response.metrics,
+          question: normalizedQuestion,
         },
       ]);
+      setSourcesOpen(true);
     } catch (requestError) {
       if (axios.isAxiosError(requestError)) {
         setError(requestError.response?.data?.detail ?? "Não foi possível consultar a IA deste projeto.");
@@ -64,10 +100,24 @@ export default function ProjectAiWorkspacePage() {
     }
   }
 
+  function handleSubmit() {
+    void submitQuestion(question);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      void handleSubmit();
+      handleSubmit();
+    }
+  }
+
+  async function handleCopy(message: ChatMessage) {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => setCopiedMessageId(null), 1600);
+    } catch {
+      setError("Não foi possível copiar a resposta.");
     }
   }
 
@@ -89,10 +139,24 @@ export default function ProjectAiWorkspacePage() {
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-2xl border bg-surface shadow-glow">
+          <section className="flex min-h-[680px] flex-col overflow-hidden rounded-2xl border bg-surface shadow-glow">
             <div className="border-b px-5 py-4">
-              <h2 className="font-[var(--font-manrope)] text-xl font-bold">Chat</h2>
-              <p className="mt-1 text-xs text-muted">A conversa é mantida apenas nesta sessão.</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="font-[var(--font-manrope)] text-xl font-bold">Chat</h2>
+                  <p className="mt-1 text-xs text-muted">A conversa é mantida apenas nesta sessão.</p>
+                </div>
+                {latestAssistantMessage?.metrics && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <span className="rounded-lg border bg-elevated px-2.5 py-1.5">
+                      Confiança {formatConfidence(latestAssistantMessage.metrics.confidence)}
+                    </span>
+                    <span className="rounded-lg border bg-elevated px-2.5 py-1.5">
+                      {formatDuration(latestAssistantMessage.metrics.total_time_ms)}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex-1 space-y-5 overflow-y-auto p-5">
@@ -117,15 +181,42 @@ export default function ProjectAiWorkspacePage() {
                       </div>
                     )}
                     <div
-                      className={`max-w-3xl rounded-2xl px-4 py-3 text-sm leading-6 ${
+                      className={`group max-w-3xl rounded-2xl px-4 py-3 text-sm leading-6 ${
                         message.role === "user"
                           ? "bg-gradient-to-r from-primary to-secondary text-white"
                           : "border bg-elevated text-foreground"
                       }`}
                     >
                       <p className="whitespace-pre-wrap">{message.content}</p>
-                      {message.role === "assistant" && message.model && (
-                        <p className="mt-3 border-t pt-2 text-[11px] text-muted">Modelo: {message.model}</p>
+                      {message.role === "assistant" && (
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-[11px] text-muted">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {message.model && <span>Modelo: {message.model}</span>}
+                            {message.metrics && <span>· {formatDuration(message.metrics.total_time_ms)}</span>}
+                            {message.metrics && <span>· Confiança {formatConfidence(message.metrics.confidence)}</span>}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleCopy(message)}
+                              className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-surface"
+                              aria-label="Copiar resposta"
+                            >
+                              {copiedMessageId === message.id ? <Check size={15} /> : <Clipboard size={15} />}
+                            </button>
+                            {message.question && (
+                              <button
+                                type="button"
+                                onClick={() => void submitQuestion(message.question ?? "")}
+                                disabled={isLoading}
+                                className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-surface disabled:opacity-50"
+                                aria-label="Regenerar resposta"
+                              >
+                                <RotateCcw size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
                     {message.role === "user" && (
@@ -143,6 +234,7 @@ export default function ProjectAiWorkspacePage() {
                   Consultando documentos e gerando resposta
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             <div className="border-t p-4">
@@ -162,7 +254,7 @@ export default function ProjectAiWorkspacePage() {
                   <p className="text-xs text-muted">Enter envia · Shift+Enter cria uma nova linha</p>
                   <button
                     type="button"
-                    onClick={() => void handleSubmit()}
+                    onClick={handleSubmit}
                     disabled={isLoading || question.trim().length < 2}
                     className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -175,37 +267,52 @@ export default function ProjectAiWorkspacePage() {
           </section>
 
           <aside className="overflow-hidden rounded-2xl border bg-surface shadow-glow">
-            <div className="border-b px-5 py-4">
-              <h2 className="font-[var(--font-manrope)] text-xl font-bold">Fontes</h2>
-              <p className="mt-1 text-xs text-muted">Trechos usados na resposta mais recente.</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSourcesOpen((value) => !value)}
+              className="flex w-full items-center justify-between border-b px-5 py-4 text-left xl:cursor-default"
+            >
+              <div>
+                <h2 className="font-[var(--font-manrope)] text-xl font-bold">Fontes</h2>
+                <p className="mt-1 text-xs text-muted">Trechos usados na resposta mais recente.</p>
+              </div>
+              <span className="xl:hidden">{sourcesOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</span>
+            </button>
 
-            {latestSources.length === 0 ? (
-              <div className="grid min-h-64 place-items-center p-6 text-center">
-                <div>
-                  <FileText className="mx-auto text-secondary" size={30} />
-                  <p className="mt-3 text-sm font-semibold">Nenhuma fonte exibida</p>
-                  <p className="mt-2 text-xs leading-5 text-muted">Envie uma pergunta para visualizar os documentos e trechos recuperados.</p>
+            <div className={sourcesOpen ? "block" : "hidden xl:block"}>
+              {latestSources.length === 0 ? (
+                <div className="grid min-h-64 place-items-center p-6 text-center">
+                  <div>
+                    <FileText className="mx-auto text-secondary" size={30} />
+                    <p className="mt-3 text-sm font-semibold">Nenhuma fonte exibida</p>
+                    <p className="mt-2 text-xs leading-5 text-muted">Envie uma pergunta para visualizar os documentos e trechos recuperados.</p>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {latestSources.map((source, index) => (
-                  <article key={source.chunk_id} className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{source.document_name}</p>
-                        <p className="mt-1 text-xs text-muted">Fonte {index + 1} · Chunk {source.chunk_index}</p>
+              ) : (
+                <div className="divide-y">
+                  {latestSources.map((source, index) => (
+                    <article key={source.chunk_id} className="p-5 transition hover:bg-elevated/60">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{source.document_name}</p>
+                          <p className="mt-1 text-xs text-muted">Fonte {index + 1} · Chunk {source.chunk_index}</p>
+                        </div>
+                        <span className="rounded-lg bg-primary/15 px-2 py-1 font-mono text-[11px] text-secondary">
+                          {source.score.toFixed(3)}
+                        </span>
                       </div>
-                      <span className="rounded-lg bg-primary/15 px-2 py-1 font-mono text-[11px] text-secondary">
-                        {source.score.toFixed(3)}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xs leading-5 text-muted">{source.snippet}</p>
-                  </article>
-                ))}
-              </div>
-            )}
+                      <p className="mt-3 text-xs leading-5 text-muted">{source.snippet}</p>
+                      <Link
+                        href={`/projects/${projectId}/documents`}
+                        className="mt-3 inline-flex text-xs font-medium text-secondary hover:underline"
+                      >
+                        Abrir conhecimento
+                      </Link>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
           </aside>
         </div>
       </section>
