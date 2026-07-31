@@ -9,6 +9,7 @@ import {
   Menu,
   Search,
   Settings,
+  Sparkles,
   Workflow,
   X,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { useAuth } from "@/providers/auth-provider";
 const navigation = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Projetos", icon: Boxes, href: "/projects" },
+  { label: "AI Apps", icon: Sparkles, href: "/ai-apps" },
   { label: "Documentos", icon: FileText },
   { label: "Agentes", icon: Bot },
   { label: "Workflows", icon: Workflow },
