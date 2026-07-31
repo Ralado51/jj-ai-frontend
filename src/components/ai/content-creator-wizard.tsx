@@ -2,11 +2,12 @@
 
 import { ArrowLeft, ArrowRight, Check, Sparkles, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { ContentCreatorBriefing } from "@/lib/content-creator";
 
 type ContentCreatorWizardProps = {
   open: boolean;
   onClose: () => void;
-  onApply: (prompt: string) => void;
+  onApply: (briefing: ContentCreatorBriefing) => void;
 };
 
 type Briefing = {
@@ -74,9 +75,16 @@ export function ContentCreatorWizard({ open, onClose, onApply }: ContentCreatorW
   }
 
   function applyWizard() {
-    const prompt = `Crie um conteúdo completo com base no briefing abaixo.\n\nTema: ${briefing.theme}\nPúblico-alvo: ${briefing.audience}\nPlataforma: ${briefing.platform}\nObjetivo: ${briefing.objective}\nFormato: ${briefing.format}\nTom de voz: ${briefing.tone}\nDuração aproximada: ${briefing.duration || "Não definida"}\nChamada para ação: ${briefing.callToAction || "Sugira a melhor CTA"}\n\nEntregue:\n1. uma ideia central clara;\n2. três opções de gancho;\n3. o roteiro completo;\n4. três opções de título;\n5. legenda ou descrição adaptada à plataforma;\n6. hashtags relevantes;\n7. uma chamada para ação final.\n\nA resposta deve ser prática, pronta para uso e adaptada ao comportamento do público na plataforma escolhida.`;
-
-    onApply(prompt);
+    onApply({
+      tema: briefing.theme.trim(),
+      publico: briefing.audience.trim(),
+      plataforma: briefing.platform.trim(),
+      objetivo: briefing.objective.trim(),
+      formato: briefing.format.trim(),
+      tom: briefing.tone.trim(),
+      duracao: briefing.duration.trim() || "Não definida",
+      cta: briefing.callToAction.trim() || "Sugira a melhor CTA",
+    });
     closeWizard();
   }
 
@@ -112,56 +120,18 @@ export function ContentCreatorWizard({ open, onClose, onApply }: ContentCreatorW
           <p className="mt-2 text-sm leading-6 text-muted">{current.description}</p>
 
           <div className="mt-6">
-            {current.key === "theme" && (
-              <textarea value={briefing.theme} onChange={(event) => updateField("theme", event.target.value)} placeholder="Ex.: Como economizar combustível na moto" rows={5} autoFocus className="w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" />
-            )}
-
-            {current.key === "audience" && (
-              <textarea value={briefing.audience} onChange={(event) => updateField("audience", event.target.value)} placeholder="Ex.: Motoboys que trabalham diariamente em grandes cidades" rows={5} autoFocus className="w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" />
-            )}
-
-            {current.key === "platform" && (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {["YouTube Shorts", "Instagram Reels", "TikTok", "LinkedIn", "YouTube", "Blog"].map((platform) => (
-                  <button key={platform} type="button" onClick={() => updateField("platform", platform)} className={`rounded-2xl border p-4 text-left text-sm font-semibold transition ${briefing.platform === platform ? "border-primary bg-primary/10 text-secondary" : "bg-background hover:bg-elevated"}`}>{platform}</button>
-                ))}
-              </div>
-            )}
-
-            {current.key === "objective" && (
-              <div className="space-y-4">
-                <textarea value={briefing.objective} onChange={(event) => updateField("objective", event.target.value)} placeholder="Ex.: Ganhar inscritos e posicionar o canal como referência" rows={4} autoFocus className="w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" />
-                <input value={briefing.callToAction} onChange={(event) => updateField("callToAction", event.target.value)} placeholder="CTA opcional: Ex.: Inscreva-se no canal" className="w-full rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" />
-              </div>
-            )}
-
-            {current.key === "style" && (
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-2"><span className="text-sm font-semibold">Formato</span><select value={briefing.format} onChange={(event) => updateField("format", event.target.value)} className="w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:border-primary"><option>Vídeo curto</option><option>Vídeo longo</option><option>Carrossel</option><option>Post</option><option>Artigo</option><option>Podcast</option></select></label>
-                <label className="space-y-2"><span className="text-sm font-semibold">Tom de voz</span><select value={briefing.tone} onChange={(event) => updateField("tone", event.target.value)} className="w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:border-primary"><option>Descontraído</option><option>Profissional</option><option>Educativo</option><option>Inspirador</option><option>Provocativo</option><option>Humorístico</option></select></label>
-                <label className="space-y-2 md:col-span-2"><span className="text-sm font-semibold">Duração</span><input value={briefing.duration} onChange={(event) => updateField("duration", event.target.value)} placeholder="Ex.: 60 segundos" className="w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:border-primary" /></label>
-              </div>
-            )}
-
-            {current.key === "review" && (
-              <div className="grid gap-3 md:grid-cols-2">
-                {[
-                  ["Tema", briefing.theme], ["Público", briefing.audience], ["Plataforma", briefing.platform], ["Objetivo", briefing.objective], ["Formato", briefing.format], ["Tom", briefing.tone], ["Duração", briefing.duration || "Não definida"], ["CTA", briefing.callToAction || "A IA irá sugerir"],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border bg-background p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{value}</p></div>
-                ))}
-              </div>
-            )}
+            {current.key === "theme" && <textarea value={briefing.theme} onChange={(event) => updateField("theme", event.target.value)} placeholder="Ex.: Como economizar combustível na moto" rows={5} autoFocus className="w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" />}
+            {current.key === "audience" && <textarea value={briefing.audience} onChange={(event) => updateField("audience", event.target.value)} placeholder="Ex.: Motoboys que trabalham diariamente em grandes cidades" rows={5} autoFocus className="w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" />}
+            {current.key === "platform" && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{["YouTube Shorts", "Instagram Reels", "TikTok", "LinkedIn", "YouTube", "Blog"].map((platform) => <button key={platform} type="button" onClick={() => updateField("platform", platform)} className={`rounded-2xl border p-4 text-left text-sm font-semibold transition ${briefing.platform === platform ? "border-primary bg-primary/10 text-secondary" : "bg-background hover:bg-elevated"}`}>{platform}</button>)}</div>}
+            {current.key === "objective" && <div className="space-y-4"><textarea value={briefing.objective} onChange={(event) => updateField("objective", event.target.value)} placeholder="Ex.: Ganhar inscritos e posicionar o canal como referência" rows={4} autoFocus className="w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" /><input value={briefing.callToAction} onChange={(event) => updateField("callToAction", event.target.value)} placeholder="CTA opcional: Ex.: Inscreva-se no canal" className="w-full rounded-2xl border bg-background px-4 py-3 text-sm outline-none focus:border-primary" /></div>}
+            {current.key === "style" && <div className="grid gap-4 md:grid-cols-2"><label className="space-y-2"><span className="text-sm font-semibold">Formato</span><select value={briefing.format} onChange={(event) => updateField("format", event.target.value)} className="w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:border-primary"><option>Vídeo curto</option><option>Vídeo longo</option><option>Carrossel</option><option>Post</option><option>Artigo</option><option>Podcast</option></select></label><label className="space-y-2"><span className="text-sm font-semibold">Tom de voz</span><select value={briefing.tone} onChange={(event) => updateField("tone", event.target.value)} className="w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:border-primary"><option>Descontraído</option><option>Profissional</option><option>Educativo</option><option>Inspirador</option><option>Provocativo</option><option>Humorístico</option></select></label><label className="space-y-2 md:col-span-2"><span className="text-sm font-semibold">Duração</span><input value={briefing.duration} onChange={(event) => updateField("duration", event.target.value)} placeholder="Ex.: 60 segundos" className="w-full rounded-xl border bg-background px-3 py-3 text-sm outline-none focus:border-primary" /></label></div>}
+            {current.key === "review" && <div className="grid gap-3 md:grid-cols-2">{[["Tema", briefing.theme], ["Público", briefing.audience], ["Plataforma", briefing.platform], ["Objetivo", briefing.objective], ["Formato", briefing.format], ["Tom", briefing.tone], ["Duração", briefing.duration || "Não definida"], ["CTA", briefing.callToAction || "A IA irá sugerir"]].map(([label, value]) => <div key={label} className="rounded-2xl border bg-background p-4"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{value}</p></div>)}</div>}
           </div>
         </div>
 
         <div className="flex items-center justify-between border-t px-5 py-4">
           <button type="button" onClick={() => setStep((currentStep) => Math.max(0, currentStep - 1))} disabled={step === 0} className="flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-semibold hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"><ArrowLeft size={16} /> Voltar</button>
-          {step < steps.length - 1 ? (
-            <button type="button" onClick={() => setStep((currentStep) => Math.min(steps.length - 1, currentStep + 1))} disabled={!canContinue} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">Continuar <ArrowRight size={16} /></button>
-          ) : (
-            <button type="button" onClick={applyWizard} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white hover:opacity-90"><Sparkles size={16} /> Aplicar briefing</button>
-          )}
+          {step < steps.length - 1 ? <button type="button" onClick={() => setStep((currentStep) => Math.min(steps.length - 1, currentStep + 1))} disabled={!canContinue} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">Continuar <ArrowRight size={16} /></button> : <button type="button" onClick={applyWizard} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white hover:opacity-90"><Sparkles size={16} /> Gerar conteúdo</button>}
         </div>
       </div>
     </div>
