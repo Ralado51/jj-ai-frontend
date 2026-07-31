@@ -1,6 +1,6 @@
 import { api, AUTH_EXPIRED_EVENT, TOKEN_KEY } from "@/lib/api";
 
-const RAG_REQUEST_TIMEOUT_MS = 190_000;
+const RAG_REQUEST_TIMEOUT_MS = 600_000;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.jjnetwork.com.br";
 
 export type RagSource = {
