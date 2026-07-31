@@ -165,6 +165,18 @@ export async function askProject(
   return response.data;
 }
 
+function isBodyStreamAbort(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  return (
+    error.name === "AbortError" ||
+    message.includes("bodystreambuffer was aborted") ||
+    message.includes("body stream buffer was aborted") ||
+    message.includes("the user aborted a request")
+  );
+}
+
 export async function streamProjectAnswer(
   projectId: string,
   question: string,
@@ -213,6 +225,7 @@ export async function streamProjectAnswer(
   const decoder = new TextDecoder();
   let buffer = "";
   let receivedDoneEvent = false;
+  let receivedContent = false;
 
   const emitLine = (line: string) => {
     const normalized = line.trim();
@@ -220,6 +233,7 @@ export async function streamProjectAnswer(
 
     const event = JSON.parse(normalized) as RagStreamEvent;
     if (event.type === "done") receivedDoneEvent = true;
+    if (event.type === "token" && event.content) receivedContent = true;
     onEvent(event);
   };
 
@@ -239,14 +253,13 @@ export async function streamProjectAnswer(
     const remaining = buffer.trim();
     if (remaining) emitLine(remaining);
   } catch (error) {
-    const isAbortError =
-      error instanceof DOMException &&
-      (error.name === "AbortError" || error.message.includes("BodyStreamBuffer was aborted"));
-
-    if (isAbortError && receivedDoneEvent) return;
-
+    if (isBodyStreamAbort(error) && (receivedDoneEvent || receivedContent)) return;
     throw error;
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // O navegador pode liberar o reader automaticamente após abortar o stream.
+    }
   }
 }
