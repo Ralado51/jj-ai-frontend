@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ContentCreatorWizard } from "@/components/ai/content-creator-wizard";
 import { MarkdownMessage } from "@/components/ai/markdown-message";
 import { PromptTemplateLibrary } from "@/components/ai/prompt-template-library";
 import { DashboardShell } from "@/components/dashboard-shell";
@@ -74,6 +75,7 @@ export default function ProjectAiWorkspacePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [isTemplateLibraryOpen, setIsTemplateLibraryOpen] = useState(false);
+  const [isContentCreatorWizardOpen, setIsContentCreatorWizardOpen] = useState(false);
   const [error, setError] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(true);
@@ -266,6 +268,12 @@ export default function ProjectAiWorkspacePage() {
     setError("");
   }
 
+  function handleApplyContentCreatorPrompt(prompt: string) {
+    setQuestion(prompt);
+    setIsContentCreatorWizardOpen(false);
+    setError("");
+  }
+
   async function handleCopy(message: ChatMessage) {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -308,6 +316,12 @@ export default function ProjectAiWorkspacePage() {
         open={isTemplateLibraryOpen}
         onClose={() => setIsTemplateLibraryOpen(false)}
         onApply={handleApplyTemplate}
+      />
+
+      <ContentCreatorWizard
+        open={isContentCreatorWizardOpen}
+        onClose={() => setIsContentCreatorWizardOpen(false)}
+        onApply={handleApplyContentCreatorPrompt}
       />
 
       <section className="mx-auto max-w-[1500px] space-y-6">
@@ -429,6 +443,9 @@ export default function ProjectAiWorkspacePage() {
                 <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Digite uma pergunta sobre os documentos do projeto..." rows={3} maxLength={2000} disabled={isLoading} className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-60" />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={() => setIsContentCreatorWizardOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
+                      <Sparkles size={16} /> Criador de conteúdo
+                    </button>
                     <button type="button" onClick={() => setIsTemplateLibraryOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl border bg-elevated px-3 text-sm font-semibold transition hover:bg-surface disabled:opacity-50">
                       <Sparkles size={16} className="text-secondary" /> Templates
                     </button>
