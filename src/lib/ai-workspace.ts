@@ -212,25 +212,41 @@ export async function streamProjectAnswer(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedDoneEvent = false;
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
+  const emitLine = (line: string) => {
+    const normalized = line.trim();
+    if (!normalized) return;
 
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+    const event = JSON.parse(normalized) as RagStreamEvent;
+    if (event.type === "done") receivedDoneEvent = true;
+    onEvent(event);
+  };
 
-    for (const line of lines) {
-      const normalized = line.trim();
-      if (!normalized) continue;
-      onEvent(JSON.parse(normalized) as RagStreamEvent);
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) emitLine(line);
+
+      if (done) break;
     }
 
-    if (done) break;
-  }
+    const remaining = buffer.trim();
+    if (remaining) emitLine(remaining);
+  } catch (error) {
+    const isAbortError =
+      error instanceof DOMException &&
+      (error.name === "AbortError" || error.message.includes("BodyStreamBuffer was aborted"));
 
-  const remaining = buffer.trim();
-  if (remaining) {
-    onEvent(JSON.parse(remaining) as RagStreamEvent);
+    if (isAbortError && receivedDoneEvent) return;
+
+    throw error;
+  } finally {
+    reader.releaseLock();
   }
 }
