@@ -117,9 +117,7 @@ export default function ProjectAiWorkspacePage() {
       try {
         const items = await refreshConversations();
         if (cancelled) return;
-        if (items.length > 0) {
-          await openConversation(items[0].id);
-        }
+        if (items.length > 0) await openConversation(items[0].id);
       } catch {
         if (!cancelled) setError("Não foi possível carregar o histórico de conversas.");
       } finally {
@@ -132,6 +130,15 @@ export default function ProjectAiWorkspacePage() {
       cancelled = true;
     };
   }, [openConversation, refreshConversations]);
+
+  useEffect(() => {
+    const storageKey = `jj-ai-content-briefing:${projectId}`;
+    const briefing = sessionStorage.getItem(storageKey);
+    if (briefing) {
+      setQuestion(briefing);
+      sessionStorage.removeItem(storageKey);
+    }
+  }, [projectId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -162,90 +169,44 @@ export default function ProjectAiWorkspacePage() {
     setMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: "user", content: normalizedQuestion },
-      {
-        id: assistantMessageId,
-        role: "assistant",
-        content: "",
-        question: normalizedQuestion,
-        isStreaming: true,
-      },
+      { id: assistantMessageId, role: "assistant", content: "", question: normalizedQuestion, isStreaming: true },
     ]);
     setQuestion("");
     setError("");
     setIsLoading(true);
 
     try {
-      await addConversationMessage(conversationId, {
-        role: "user",
-        content: normalizedQuestion,
-      });
-
+      await addConversationMessage(conversationId, { role: "user", content: normalizedQuestion });
       let finalAnswer = "";
       let finalModel = "";
 
       await streamProjectAnswer(projectId, normalizedQuestion, conversationId, (event) => {
         if (event.type === "metadata") {
           finalModel = event.chat_model;
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessageId
-                ? { ...message, model: event.chat_model, sources: event.sources }
-                : message,
-            ),
-          );
+          setMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, model: event.chat_model, sources: event.sources } : message));
           setSourcesOpen(true);
           return;
         }
-
         if (event.type === "token") {
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessageId
-                ? { ...message, content: `${message.content}${event.content}` }
-                : message,
-            ),
-          );
+          setMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: `${message.content}${event.content}` } : message));
           return;
         }
-
         if (event.type === "done") {
           finalAnswer = event.answer;
-          setMessages((current) =>
-            current.map((message) =>
-              message.id === assistantMessageId
-                ? {
-                    ...message,
-                    content: event.answer,
-                    metrics: event.metrics,
-                    isStreaming: false,
-                  }
-                : message,
-            ),
-          );
+          setMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, content: event.answer, metrics: event.metrics, isStreaming: false } : message));
           return;
         }
-
         if (event.type === "error") throw new Error(event.detail);
       });
 
       if (finalAnswer) {
-        await addConversationMessage(conversationId, {
-          role: "assistant",
-          content: finalAnswer,
-          model: finalModel || undefined,
-        });
+        await addConversationMessage(conversationId, { role: "assistant", content: finalAnswer, model: finalModel || undefined });
       }
       await refreshConversations();
     } catch (requestError) {
-      const detail = requestError instanceof Error
-        ? requestError.message
-        : "Não foi possível consultar a IA deste projeto.";
+      const detail = requestError instanceof Error ? requestError.message : "Não foi possível consultar a IA deste projeto.";
       setError(detail);
-      setMessages((current) =>
-        current.map((message) =>
-          message.id === assistantMessageId ? { ...message, isStreaming: false } : message,
-        ),
-      );
+      setMessages((current) => current.map((message) => message.id === assistantMessageId ? { ...message, isStreaming: false } : message));
     } finally {
       setIsLoading(false);
     }
@@ -311,43 +272,23 @@ export default function ProjectAiWorkspacePage() {
 
   return (
     <DashboardShell>
-      <PromptTemplateLibrary
-        projectId={projectId}
-        open={isTemplateLibraryOpen}
-        onClose={() => setIsTemplateLibraryOpen(false)}
-        onApply={handleApplyTemplate}
-      />
-
-      <ContentCreatorWizard
-        open={isContentCreatorWizardOpen}
-        onClose={() => setIsContentCreatorWizardOpen(false)}
-        onApply={handleApplyContentCreatorPrompt}
-      />
+      <PromptTemplateLibrary projectId={projectId} open={isTemplateLibraryOpen} onClose={() => setIsTemplateLibraryOpen(false)} onApply={handleApplyTemplate} />
+      <ContentCreatorWizard open={isContentCreatorWizardOpen} onClose={() => setIsContentCreatorWizardOpen(false)} onApply={handleApplyContentCreatorPrompt} />
 
       <section className="mx-auto max-w-[1500px] space-y-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <Link href={`/projects/${projectId}/documents`} className="text-sm font-medium text-secondary hover:underline">
-              Conhecimento do projeto
-            </Link>
+            <Link href={`/projects/${projectId}/documents`} className="text-sm font-medium text-secondary hover:underline">Conhecimento do projeto</Link>
             <h1 className="mt-2 font-[var(--font-manrope)] text-3xl font-bold tracking-tight">AI Workspace</h1>
             <p className="mt-2 text-sm text-muted">Converse com a base de conhecimento do projeto e acompanhe as fontes utilizadas.</p>
           </div>
-          <div className="flex items-center gap-2 rounded-xl border bg-surface px-4 py-2 text-sm text-muted">
-            <Sparkles size={16} className="text-secondary" /> Respostas em tempo real
-          </div>
+          <div className="flex items-center gap-2 rounded-xl border bg-surface px-4 py-2 text-sm text-muted"><Sparkles size={16} className="text-secondary" /> Respostas em tempo real</div>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
           <aside className="overflow-hidden rounded-2xl border bg-surface shadow-glow">
             <div className="border-b p-4">
-              <button
-                type="button"
-                onClick={() => void handleNewConversation()}
-                className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white"
-              >
-                <MessageSquarePlus size={17} /> Nova conversa
-              </button>
+              <button type="button" onClick={() => void handleNewConversation()} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white"><MessageSquarePlus size={17} /> Nova conversa</button>
             </div>
             <div className="max-h-[720px] overflow-y-auto p-2">
               {isLoadingConversations ? (
@@ -356,20 +297,13 @@ export default function ProjectAiWorkspacePage() {
                 <p className="p-4 text-sm text-muted">Nenhuma conversa salva.</p>
               ) : (
                 conversations.map((conversation) => (
-                  <div
-                    key={conversation.id}
-                    className={`group mb-1 rounded-xl border px-3 py-3 transition ${
-                      conversation.id === activeConversationId ? "border-primary/50 bg-primary/10" : "border-transparent hover:bg-elevated"
-                    }`}
-                  >
+                  <div key={conversation.id} className={`group mb-1 rounded-xl border px-3 py-3 transition ${conversation.id === activeConversationId ? "border-primary/50 bg-primary/10" : "border-transparent hover:bg-elevated"}`}>
                     <button type="button" onClick={() => void openConversation(conversation.id)} className="w-full text-left">
                       <p className="truncate text-sm font-medium">{conversation.title}</p>
                       <p className="mt-1 text-[11px] text-muted">{new Date(conversation.updated_at).toLocaleDateString("pt-BR")}</p>
                     </button>
                     <div className="mt-2 flex items-center gap-1 opacity-70 group-hover:opacity-100">
-                      <button type="button" onClick={() => void handleToggleFavorite(conversation)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-surface" aria-label="Favoritar">
-                        <Star size={14} className={conversation.is_favorite ? "fill-current text-amber-400" : ""} />
-                      </button>
+                      <button type="button" onClick={() => void handleToggleFavorite(conversation)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-surface" aria-label="Favoritar"><Star size={14} className={conversation.is_favorite ? "fill-current text-amber-400" : ""} /></button>
                       <button type="button" onClick={() => void handleRename(conversation)} className="grid h-7 w-7 place-items-center rounded-lg hover:bg-surface" aria-label="Renomear"><Pencil size={14} /></button>
                       <button type="button" onClick={() => void handleDelete(conversation)} className="grid h-7 w-7 place-items-center rounded-lg text-red-300 hover:bg-red-400/10" aria-label="Excluir"><Trash2 size={14} /></button>
                     </div>
@@ -410,19 +344,11 @@ export default function ProjectAiWorkspacePage() {
                     {message.role === "assistant" && <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-secondary"><Bot size={18} /></div>}
                     <div className={`group max-w-3xl rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === "user" ? "bg-gradient-to-r from-primary to-secondary text-white" : "border bg-elevated text-foreground"}`}>
                       {message.role === "assistant" ? (
-                        message.content ? (
-                          <div><MarkdownMessage content={message.content} />{message.isStreaming && <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-secondary align-middle" />}</div>
-                        ) : (
-                          <div className="flex items-center gap-2 text-muted"><LoaderCircle className="animate-spin text-secondary" size={16} /> Buscando fontes e iniciando resposta</div>
-                        )
+                        message.content ? <div><MarkdownMessage content={message.content} />{message.isStreaming && <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-secondary align-middle" />}</div> : <div className="flex items-center gap-2 text-muted"><LoaderCircle className="animate-spin text-secondary" size={16} /> Buscando fontes e iniciando resposta</div>
                       ) : <p className="whitespace-pre-wrap">{message.content}</p>}
                       {message.role === "assistant" && !message.isStreaming && message.content && (
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-2 text-[11px] text-muted">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {message.model && <span>Modelo: {message.model}</span>}
-                            {message.metrics && <span>· {formatDuration(message.metrics.total_time_ms)}</span>}
-                            {message.metrics && <span>· Confiança {formatConfidence(message.metrics.confidence)}</span>}
-                          </div>
+                          <div className="flex flex-wrap items-center gap-2">{message.model && <span>Modelo: {message.model}</span>}{message.metrics && <span>· {formatDuration(message.metrics.total_time_ms)}</span>}{message.metrics && <span>· Confiança {formatConfidence(message.metrics.confidence)}</span>}</div>
                           <div className="flex items-center gap-1">
                             <button type="button" onClick={() => void handleCopy(message)} className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-surface" aria-label="Copiar resposta">{copiedMessageId === message.id ? <Check size={15} /> : <Clipboard size={15} />}</button>
                             {message.question && <button type="button" onClick={() => void submitQuestion(message.question ?? "")} disabled={isLoading} className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-surface disabled:opacity-50" aria-label="Regenerar resposta"><RotateCcw size={15} /></button>}
@@ -443,17 +369,11 @@ export default function ProjectAiWorkspacePage() {
                 <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleKeyDown} placeholder="Digite uma pergunta sobre os documentos do projeto..." rows={3} maxLength={2000} disabled={isLoading} className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted disabled:opacity-60" />
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" onClick={() => setIsContentCreatorWizardOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50">
-                      <Sparkles size={16} /> Criador de conteúdo
-                    </button>
-                    <button type="button" onClick={() => setIsTemplateLibraryOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl border bg-elevated px-3 text-sm font-semibold transition hover:bg-surface disabled:opacity-50">
-                      <Sparkles size={16} className="text-secondary" /> Templates
-                    </button>
+                    <button type="button" onClick={() => setIsContentCreatorWizardOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary/20 to-secondary/15 px-3 text-sm font-semibold text-foreground ring-1 ring-primary/30 transition hover:from-primary/30 hover:to-secondary/25 disabled:opacity-50"><Sparkles size={16} className="text-secondary" /> Criador de conteúdo</button>
+                    <button type="button" onClick={() => setIsTemplateLibraryOpen(true)} disabled={isLoading} className="flex h-10 items-center gap-2 rounded-xl border bg-elevated px-3 text-sm font-semibold transition hover:bg-surface disabled:opacity-50"><Sparkles size={16} className="text-secondary" /> Templates</button>
                     <p className="text-xs text-muted">Enter envia · Shift+Enter cria uma nova linha</p>
                   </div>
-                  <button type="button" onClick={handleSubmit} disabled={isLoading || question.trim().length < 2} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
-                    {isLoading ? <LoaderCircle className="animate-spin" size={16} /> : <Send size={16} />}{isLoading ? "Gerando" : "Enviar"}
-                  </button>
+                  <button type="button" onClick={handleSubmit} disabled={isLoading || question.trim().length < 2} className="flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">{isLoading ? <LoaderCircle className="animate-spin" size={16} /> : <Send size={16} />}{isLoading ? "Gerando" : "Enviar"}</button>
                 </div>
               </div>
             </div>
