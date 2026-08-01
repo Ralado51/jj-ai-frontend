@@ -1,5 +1,15 @@
 import { api } from "@/lib/api";
 
+export const AI_TASK_OPTIONS = [
+  { value: "content_generation", label: "Criação de conteúdo" },
+  { value: "rag", label: "RAG e documentos" },
+  { value: "coding", label: "Código" },
+  { value: "summarization", label: "Resumo" },
+  { value: "general", label: "Geral" },
+] as const;
+
+export type AITaskType = (typeof AI_TASK_OPTIONS)[number]["value"];
+
 export type BenchmarkScores = {
   hook: number;
   storytelling: number;
@@ -21,6 +31,7 @@ export type BenchmarkResult = {
 };
 
 export type BenchmarkRunResponse = {
+  task: AITaskType;
   winner: string | null;
   results: BenchmarkResult[];
 };
@@ -43,6 +54,7 @@ export type AnalyticsSummary = {
 };
 
 export async function runBenchmark(payload: {
+  task: AITaskType;
   system_prompt: string;
   prompt: string;
   models: string[];
@@ -53,7 +65,9 @@ export async function runBenchmark(payload: {
   return data;
 }
 
-export async function getAnalyticsSummary(): Promise<AnalyticsSummary> {
-  const { data } = await api.get<AnalyticsSummary>("/api/v1/analytics/summary");
+export async function getAnalyticsSummary(task?: AITaskType): Promise<AnalyticsSummary> {
+  const { data } = await api.get<AnalyticsSummary>("/api/v1/analytics/summary", {
+    params: task ? { task } : undefined,
+  });
   return data;
 }
