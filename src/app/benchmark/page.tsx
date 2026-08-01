@@ -4,11 +4,12 @@ import { AxiosError } from "axios";
 import { BarChart3, LoaderCircle, Play, Trophy } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { BenchmarkRunResponse, runBenchmark } from "@/lib/benchmark";
+import { AITaskType, AI_TASK_OPTIONS, BenchmarkRunResponse, runBenchmark } from "@/lib/benchmark";
 
 const defaultModels = "qwen2.5:3b\ngemma3:4b";
 
 export default function BenchmarkPage() {
+  const [task, setTask] = useState<AITaskType>("general");
   const [systemPrompt, setSystemPrompt] = useState("Você é um assistente útil e objetivo.");
   const [prompt, setPrompt] = useState("");
   const [modelsText, setModelsText] = useState(defaultModels);
@@ -20,14 +21,14 @@ export default function BenchmarkPage() {
     event.preventDefault();
     setError("");
     const models = modelsText.split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
-    if (models.length < 2) {
+    if (new Set(models).size < 2) {
       setError("Informe pelo menos dois modelos distintos.");
       return;
     }
 
     setLoading(true);
     try {
-      setResult(await runBenchmark({ system_prompt: systemPrompt, prompt, models }));
+      setResult(await runBenchmark({ task, system_prompt: systemPrompt, prompt, models }));
     } catch (requestError) {
       const axiosError = requestError as AxiosError<{ detail?: string }>;
       setError(axiosError.response?.data?.detail ?? "Não foi possível executar o benchmark.");
@@ -35,6 +36,8 @@ export default function BenchmarkPage() {
       setLoading(false);
     }
   }
+
+  const resultTask = AI_TASK_OPTIONS.find((item) => item.value === result?.task)?.label;
 
   return (
     <DashboardShell>
@@ -45,12 +48,18 @@ export default function BenchmarkPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Laboratório de modelos</p>
               <h1 className="mt-2 font-[var(--font-manrope)] text-3xl font-bold md:text-4xl">Prompt Benchmark</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">Execute o mesmo prompt em vários modelos locais e compare qualidade, duração e consumo estimado.</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">Compare modelos dentro da mesma categoria de tarefa para alimentar a seleção automática corretamente.</p>
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="grid gap-5 rounded-2xl border bg-surface p-5 md:p-6">
+          <label className="grid gap-2 text-sm font-semibold">Tipo de tarefa
+            <select value={task} onChange={(event) => setTask(event.target.value as AITaskType)} className="h-12 rounded-xl border bg-background px-3 font-normal outline-none focus:ring-2 focus:ring-primary/30">
+              {AI_TASK_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <span className="text-xs font-normal text-muted">Os resultados serão usados apenas para recomendar modelos nesta categoria.</span>
+          </label>
           <label className="grid gap-2 text-sm font-semibold">System prompt
             <textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} className="min-h-24 rounded-xl border bg-background p-3 font-normal outline-none focus:ring-2 focus:ring-primary/30" required />
           </label>
@@ -71,7 +80,7 @@ export default function BenchmarkPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3 rounded-2xl border bg-primary/10 p-4">
               <Trophy className="text-secondary" />
-              <div><p className="text-xs text-muted">Modelo vencedor</p><p className="font-semibold">{result.winner ?? "Nenhum modelo concluiu"}</p></div>
+              <div><p className="text-xs text-muted">Vencedor em {resultTask ?? result.task}</p><p className="font-semibold">{result.winner ?? "Nenhum modelo concluiu"}</p></div>
             </div>
             <div className="overflow-x-auto rounded-2xl border bg-surface">
               <table className="w-full min-w-[760px] text-left text-sm">
