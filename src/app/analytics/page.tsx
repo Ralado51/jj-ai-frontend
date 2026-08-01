@@ -3,21 +3,26 @@
 import { Activity, BrainCircuit, Gauge, LoaderCircle, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { AnalyticsSummary, getAnalyticsSummary } from "@/lib/benchmark";
+import { AITaskType, AI_TASK_OPTIONS, AnalyticsSummary, getAnalyticsSummary } from "@/lib/benchmark";
 
 export default function AnalyticsPage() {
+  const [task, setTask] = useState<AITaskType | "all">("all");
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
-    getAnalyticsSummary()
+    setLoading(true);
+    setError("");
+    getAnalyticsSummary(task === "all" ? undefined : task)
       .then((data) => active && setSummary(data))
       .catch(() => active && setError("Não foi possível carregar o histórico de benchmarks."))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
-  }, []);
+  }, [task]);
+
+  const taskLabel = task === "all" ? "Todas as tarefas" : AI_TASK_OPTIONS.find((item) => item.value === task)?.label;
 
   return (
     <DashboardShell>
@@ -25,14 +30,24 @@ export default function AnalyticsPage() {
         <div className="rounded-3xl border bg-surface p-6 shadow-glow md:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Inteligência operacional</p>
           <h1 className="mt-2 font-[var(--font-manrope)] text-3xl font-bold md:text-4xl">AI Analytics</h1>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">Acompanhe qualidade, desempenho e vitórias dos modelos avaliados no Prompt Benchmark.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">Compare o desempenho geral ou filtre por tarefa para descobrir o modelo ideal em cada runtime.</p>
+        </div>
+
+        <div className="rounded-2xl border bg-surface p-5">
+          <label className="grid max-w-md gap-2 text-sm font-semibold">Filtrar por tarefa
+            <select value={task} onChange={(event) => setTask(event.target.value as AITaskType | "all")} className="h-12 rounded-xl border bg-background px-3 font-normal outline-none focus:ring-2 focus:ring-primary/30">
+              <option value="all">Todas as tarefas</option>
+              {AI_TASK_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </label>
         </div>
 
         {loading ? <div className="flex items-center justify-center gap-3 rounded-2xl border bg-surface p-12 text-muted"><LoaderCircle className="animate-spin" /> Carregando métricas...</div> : null}
         {error ? <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</p> : null}
 
-        {summary ? (
+        {!loading && summary ? (
           <>
+            <p className="text-sm text-muted">Exibindo: <span className="font-semibold text-foreground">{taskLabel}</span></p>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <Metric icon={Activity} label="Benchmarks" value={summary.total_runs.toString()} />
               <Metric icon={BrainCircuit} label="Execuções" value={summary.total_results.toString()} />
@@ -45,14 +60,14 @@ export default function AnalyticsPage() {
                 <div className="border-b p-5"><h2 className="font-[var(--font-manrope)] text-xl font-bold">Desempenho por modelo</h2></div>
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="border-b bg-elevated"><tr><th className="p-4">Modelo</th><th className="p-4">Execuções</th><th className="p-4">Nota média</th><th className="p-4">Tempo médio</th><th className="p-4">Tokens estimados</th></tr></thead>
-                  <tbody>{summary.models.length ? summary.models.map((model) => <tr key={model.model} className="border-b last:border-0"><td className="p-4 font-mono">{model.model}</td><td className="p-4">{model.executions}</td><td className="p-4 font-semibold">{model.average_score.toFixed(2)}</td><td className="p-4">{(model.average_duration_ms / 1000).toFixed(2)} s</td><td className="p-4">{model.estimated_tokens}</td></tr>) : <tr><td colSpan={5} className="p-8 text-center text-muted">Execute benchmarks para alimentar o painel.</td></tr>}</tbody>
+                  <tbody>{summary.models.length ? summary.models.map((model) => <tr key={model.model} className="border-b last:border-0"><td className="p-4 font-mono">{model.model}</td><td className="p-4">{model.executions}</td><td className="p-4 font-semibold">{model.average_score.toFixed(2)}</td><td className="p-4">{(model.average_duration_ms / 1000).toFixed(2)} s</td><td className="p-4">{model.estimated_tokens}</td></tr>) : <tr><td colSpan={5} className="p-8 text-center text-muted">Não há benchmarks para esta tarefa.</td></tr>}</tbody>
                 </table>
               </div>
 
               <aside className="rounded-2xl border bg-surface p-5">
                 <h2 className="font-[var(--font-manrope)] text-xl font-bold">Vitórias</h2>
-                <p className="mt-1 text-sm text-muted">Quantidade de vezes em que cada modelo liderou um benchmark.</p>
-                <div className="mt-5 space-y-3">{summary.winners.length ? summary.winners.map((winner, index) => <div key={winner.model} className="flex items-center justify-between rounded-xl border bg-background p-3"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-sm font-bold text-secondary">{index + 1}</span><span className="font-mono text-sm">{winner.model}</span></div><span className="font-semibold">{winner.wins}</span></div>) : <p className="rounded-xl border bg-background p-4 text-sm text-muted">Ainda não há vencedores registrados.</p>}</div>
+                <p className="mt-1 text-sm text-muted">Lideranças registradas no recorte selecionado.</p>
+                <div className="mt-5 space-y-3">{summary.winners.length ? summary.winners.map((winner, index) => <div key={winner.model} className="flex items-center justify-between rounded-xl border bg-background p-3"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-primary/15 text-sm font-bold text-secondary">{index + 1}</span><span className="font-mono text-sm">{winner.model}</span></div><span className="font-semibold">{winner.wins}</span></div>) : <p className="rounded-xl border bg-background p-4 text-sm text-muted">Ainda não há vencedores neste recorte.</p>}</div>
               </aside>
             </div>
           </>
