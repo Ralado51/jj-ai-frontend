@@ -34,10 +34,30 @@ export type WorkflowRunPayload = {
 };
 
 export type WorkflowRunResponse = AgentOrchestrationResponse & {
-  workflow: PersistedWorkflow;
+  execution_id: string;
+  workflow_id: string;
+  workflow_name: string;
   project_id?: string | null;
   session_key?: string | null;
   use_memory?: boolean;
+};
+
+export type WorkflowExecution = {
+  id: string;
+  workflow_id: string;
+  project_id: string | null;
+  workflow_name: string;
+  status: "running" | "completed" | "failed" | string;
+  instruction: string;
+  session_key: string | null;
+  use_memory: boolean;
+  steps_total: number;
+  steps_completed: number;
+  total_duration_ms: number;
+  final_content: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export async function listWorkflows(projectId?: string): Promise<PersistedWorkflow[]> {
@@ -66,5 +86,17 @@ export async function runPersistedWorkflow(id: string, payload: WorkflowRunPaylo
   const { data } = await api.post<WorkflowRunResponse>(`/api/v1/workflows/${id}/run`, payload, {
     timeout: 600_000,
   });
+  return data;
+}
+
+export async function listWorkflowExecutions(workflowId?: string, limit = 50): Promise<WorkflowExecution[]> {
+  const { data } = await api.get<WorkflowExecution[]>("/api/v1/workflows/executions", {
+    params: { workflow_id: workflowId || undefined, limit },
+  });
+  return data;
+}
+
+export async function getWorkflowExecution(id: string): Promise<WorkflowExecution> {
+  const { data } = await api.get<WorkflowExecution>(`/api/v1/workflows/executions/${id}`);
   return data;
 }
