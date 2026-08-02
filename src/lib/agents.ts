@@ -44,6 +44,25 @@ export type AgentExecution = {
   created_at: string;
 };
 
+export type AgentOrchestrationStep = {
+  agent_id: string;
+  instruction?: string;
+};
+
+export type AgentOrchestrationPayload = {
+  instruction: string;
+  steps: AgentOrchestrationStep[];
+  project_id?: string;
+  session_key?: string;
+  use_memory?: boolean;
+};
+
+export type AgentOrchestrationResponse = {
+  steps: AgentRunResponse[];
+  final_content: string;
+  total_duration_ms: number;
+};
+
 export async function listAgents(): Promise<AgentDescriptor[]> {
   const { data } = await api.get<AgentDescriptor[]>("/api/v1/agents");
   return data;
@@ -53,6 +72,17 @@ export async function runAgent(payload: AgentRunPayload): Promise<AgentRunRespon
   const { data } = await api.post<AgentRunResponse>("/api/v1/agents/run", payload, {
     timeout: 600_000,
   });
+  return data;
+}
+
+export async function orchestrateAgents(
+  payload: AgentOrchestrationPayload,
+): Promise<AgentOrchestrationResponse> {
+  const { data } = await api.post<AgentOrchestrationResponse>(
+    "/api/v1/agents/orchestrate",
+    payload,
+    { timeout: 900_000 },
+  );
   return data;
 }
 
