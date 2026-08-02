@@ -42,6 +42,21 @@ export type WorkflowRunResponse = AgentOrchestrationResponse & {
   use_memory?: boolean;
 };
 
+export type WorkflowExecutionStepDetail = {
+  position: number;
+  agent_execution_id: string | null;
+  agent_id: string;
+  agent_name: string;
+  task_type: string;
+  provider: string;
+  model: string;
+  model_selection_source: string;
+  routing_reason: string;
+  duration_ms: number;
+  memory_items_used: number;
+  content: string;
+};
+
 export type WorkflowExecution = {
   id: string;
   workflow_id: string;
@@ -56,6 +71,7 @@ export type WorkflowExecution = {
   total_duration_ms: number;
   final_content: string | null;
   error_message: string | null;
+  step_details: WorkflowExecutionStepDetail[];
   created_at: string;
   updated_at: string;
 };
