@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { AgentOrchestrationStep } from "@/lib/agents";
+import type { AgentOrchestrationResponse, AgentOrchestrationStep } from "@/lib/agents";
 
 export type PersistedWorkflow = {
   id: string;
@@ -26,6 +26,20 @@ export type WorkflowPayload = {
   use_memory?: boolean;
 };
 
+export type WorkflowRunPayload = {
+  instruction?: string;
+  project_id?: string | null;
+  session_key?: string | null;
+  use_memory?: boolean;
+};
+
+export type WorkflowRunResponse = AgentOrchestrationResponse & {
+  workflow: PersistedWorkflow;
+  project_id?: string | null;
+  session_key?: string | null;
+  use_memory?: boolean;
+};
+
 export async function listWorkflows(projectId?: string): Promise<PersistedWorkflow[]> {
   const { data } = await api.get<PersistedWorkflow[]>("/api/v1/workflows", {
     params: projectId ? { project_id: projectId } : undefined,
@@ -45,5 +59,12 @@ export async function updateWorkflow(id: string, payload: Partial<WorkflowPayloa
 
 export async function archiveWorkflow(id: string): Promise<PersistedWorkflow> {
   const { data } = await api.delete<PersistedWorkflow>(`/api/v1/workflows/${id}`);
+  return data;
+}
+
+export async function runPersistedWorkflow(id: string, payload: WorkflowRunPayload): Promise<WorkflowRunResponse> {
+  const { data } = await api.post<WorkflowRunResponse>(`/api/v1/workflows/${id}/run`, payload, {
+    timeout: 600_000,
+  });
   return data;
 }
