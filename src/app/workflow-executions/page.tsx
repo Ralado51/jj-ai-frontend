@@ -1,9 +1,15 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Clock3, LoaderCircle, RefreshCw, Workflow } from "lucide-react";
+import { AxiosError } from "axios";
+import { AlertCircle, CheckCircle2, Clock3, LoaderCircle, RefreshCw, RotateCcw, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { getWorkflowExecution, listWorkflowExecutions, WorkflowExecution } from "@/lib/workflows";
+import {
+  getWorkflowExecution,
+  listWorkflowExecutions,
+  retryWorkflowExecution,
+  WorkflowExecution,
+} from "@/lib/workflows";
 
 function statusLabel(status: string) {
   if (status === "completed") return "Concluído";
@@ -29,13 +35,17 @@ export default function WorkflowExecutionsPage() {
   const [selected, setSelected] = useState<WorkflowExecution | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  async function refresh() {
+  async function refresh(selectId?: string) {
     setLoading(true);
     setError("");
     try {
-      setRows(await listWorkflowExecutions(undefined, 100));
+      const executions = await listWorkflowExecutions(undefined, 100);
+      setRows(executions);
+      if (selectId) setSelected(await getWorkflowExecution(selectId));
     } catch {
       setError("Não foi possível carregar o histórico de execuções.");
     } finally {
@@ -54,12 +64,30 @@ export default function WorkflowExecutionsPage() {
   async function openExecution(id: string) {
     setLoadingDetails(true);
     setError("");
+    setSuccess("");
     try {
       setSelected(await getWorkflowExecution(id));
     } catch {
       setError("Não foi possível carregar os detalhes da execução.");
     } finally {
       setLoadingDetails(false);
+    }
+  }
+
+  async function retrySelected() {
+    if (!selected || selected.status === "running") return;
+    setRetrying(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await retryWorkflowExecution(selected.id);
+      setSuccess("Nova execução criada com os mesmos parâmetros da execução anterior.");
+      await refresh(response.execution_id);
+    } catch (requestError) {
+      const axiosError = requestError as AxiosError<{ detail?: string }>;
+      setError(axiosError.response?.data?.detail ?? "Não foi possível tentar novamente esta execução.");
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -78,19 +106,21 @@ export default function WorkflowExecutionsPage() {
     </div>
 
     {error ? <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p> : null}
+    {success ? <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{success}</p> : null}
 
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
       <section className="overflow-hidden rounded-2xl border bg-surface">
-        {loading ? <div className="grid min-h-72 place-items-center"><LoaderCircle className="animate-spin" /></div> : rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b bg-background/60 text-xs uppercase tracking-wide text-muted"><tr><th className="px-4 py-3">Workflow</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Etapas</th><th className="px-4 py-3">Duração</th><th className="px-4 py-3">Início</th></tr></thead><tbody>{rows.map((item) => <tr key={item.id} onClick={() => void openExecution(item.id)} className="cursor-pointer border-b last:border-0 hover:bg-elevated"><td className="px-4 py-4 font-medium">{item.workflow_name}</td><td className="px-4 py-4"><span className="inline-flex items-center gap-2"><StatusIcon status={item.status} />{statusLabel(item.status)}</span></td><td className="px-4 py-4">{item.steps_completed}/{item.steps_total}</td><td className="px-4 py-4">{(item.total_duration_ms / 1000).toFixed(2)} s</td><td className="px-4 py-4 text-muted">{new Date(item.created_at).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-muted">Nenhuma execução registrada.</p>}
+        {loading ? <div className="grid min-h-72 place-items-center"><LoaderCircle className="animate-spin" /></div> : rows.length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b bg-background/60 text-xs uppercase tracking-wide text-muted"><tr><th className="px-4 py-3">Workflow</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Etapas</th><th className="px-4 py-3">Duração</th><th className="px-4 py-3">Início</th></tr></thead><tbody>{rows.map((item) => <tr key={item.id} onClick={() => void openExecution(item.id)} className={`cursor-pointer border-b last:border-0 hover:bg-elevated ${selected?.id === item.id ? "bg-primary/10" : ""}`}><td className="px-4 py-4 font-medium">{item.workflow_name}</td><td className="px-4 py-4"><span className="inline-flex items-center gap-2"><StatusIcon status={item.status} />{statusLabel(item.status)}</span></td><td className="px-4 py-4">{item.steps_completed}/{item.steps_total}</td><td className="px-4 py-4">{(item.total_duration_ms / 1000).toFixed(2)} s</td><td className="px-4 py-4 text-muted">{new Date(item.created_at).toLocaleString("pt-BR")}</td></tr>)}</tbody></table></div> : <p className="p-8 text-center text-sm text-muted">Nenhuma execução registrada.</p>}
       </section>
 
       <aside className="h-fit rounded-2xl border bg-surface p-5 xl:sticky xl:top-24">
         {loadingDetails ? <div className="grid min-h-56 place-items-center"><LoaderCircle className="animate-spin" /></div> : selected ? <div className="space-y-5">
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-secondary">Execução</p><h2 className="mt-1 text-xl font-bold">{selected.workflow_name}</h2></div><StatusIcon status={selected.status} /></div>
+          <button type="button" onClick={() => void retrySelected()} disabled={retrying || selected.status === "running"} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border font-semibold disabled:cursor-not-allowed disabled:opacity-50">{retrying ? <LoaderCircle className="animate-spin" size={17} /> : <RotateCcw size={17} />}{retrying ? "Executando novamente..." : "Tentar novamente"}</button>
           <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Status</p><p className="mt-1 font-semibold">{statusLabel(selected.status)}</p></div><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Duração</p><p className="mt-1 font-semibold">{(selected.total_duration_ms / 1000).toFixed(2)} s</p></div><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Etapas</p><p className="mt-1 font-semibold">{selected.steps_completed}/{selected.steps_total}</p></div><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Memória</p><p className="mt-1 font-semibold">{selected.use_memory ? "Ativa" : "Desativada"}</p></div></div>
           <div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Instrução</p><p className="mt-2 whitespace-pre-wrap rounded-xl bg-background p-3 text-sm leading-6">{selected.instruction}</p></div>
           {selected.error_message ? <div><p className="text-xs font-semibold uppercase tracking-wide text-red-300">Erro</p><p className="mt-2 rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{selected.error_message}</p></div> : null}
-          <div><p className="text-xs font-semibold uppercase tracking-wide text-secondary">Etapas executadas</p>{selected.step_details.length ? <div className="mt-3 space-y-3">{selected.step_details.map((step) => <article key={`${step.position}-${step.agent_id}`} className="rounded-xl border bg-background p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">Etapa {step.position}</p><p className="font-semibold">{step.agent_name}</p><p className="mt-1 text-xs text-muted">{step.task_type}</p></div><span className="rounded-full border px-2.5 py-1 text-xs">{(step.duration_ms / 1000).toFixed(2)} s</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg border p-2"><p className="text-muted">Modelo</p><p className="mt-1 break-all font-medium">{step.model}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Provider</p><p className="mt-1 font-medium">{step.provider}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Seleção</p><p className="mt-1 font-medium">{sourceLabel(step.model_selection_source)}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Memória usada</p><p className="mt-1 font-medium">{step.memory_items_used} item(ns)</p></div></div><div className="mt-3"><p className="text-xs font-semibold text-muted">Motivo do roteamento</p><p className="mt-1 text-xs leading-5">{step.routing_reason}</p></div><details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-secondary">Ver resposta da etapa</summary><div className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border p-3 text-xs leading-5">{step.content}</div></details></article>)}</div> : <p className="mt-2 rounded-xl border border-dashed p-3 text-sm text-muted">Esta execução não possui detalhes por etapa. Execuções anteriores à migration podem aparecer assim.</p>}</div>
+          <div><p className="text-xs font-semibold uppercase tracking-wide text-secondary">Etapas executadas</p>{selected.step_details.length ? <div className="mt-3 space-y-3">{selected.step_details.map((step) => <article key={`${step.position}-${step.agent_id}`} className="rounded-xl border bg-background p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">Etapa {step.position}</p><p className="font-semibold">{step.agent_name}</p><p className="mt-1 text-xs text-muted">{step.task_type}</p></div><span className="rounded-full border px-2.5 py-1 text-xs">{(step.duration_ms / 1000).toFixed(2)} s</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg border p-2"><p className="text-muted">Modelo</p><p className="mt-1 break-all font-medium">{step.model}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Provider</p><p className="mt-1 font-medium">{step.provider}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Seleção</p><p className="mt-1 font-medium">{sourceLabel(step.model_selection_source)}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Memória usada</p><p className="mt-1 font-medium">{step.memory_items_used} item(ns)</p></div></div><div className="mt-3"><p className="text-xs font-semibold text-muted">Motivo do roteamento</p><p className="mt-1 text-xs leading-5">{step.routing_reason}</p></div><details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-secondary">Ver resposta da etapa</summary><div className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border p-3 text-xs leading-5">{step.content}</div></details></article>)}</div> : <p className="mt-2 rounded-xl border border-dashed p-3 text-sm text-muted">Esta execução não possui detalhes por etapa.</p>}</div>
           {selected.final_content ? <div><p className="text-xs font-semibold uppercase tracking-wide text-secondary">Conteúdo final</p><div className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl bg-background p-3 text-sm leading-6">{selected.final_content}</div></div> : null}
           <p className="flex items-center gap-2 text-xs text-muted"><Clock3 size={14} /> Atualizada em {new Date(selected.updated_at).toLocaleString("pt-BR")}</p>
         </div> : <p className="text-sm text-muted">Selecione uma execução para ver os detalhes.</p>}
