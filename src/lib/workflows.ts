@@ -116,3 +116,15 @@ export async function getWorkflowExecution(id: string): Promise<WorkflowExecutio
   const { data } = await api.get<WorkflowExecution>(`/api/v1/workflows/executions/${id}`);
   return data;
 }
+
+export async function retryWorkflowExecution(
+  id: string,
+  payload: WorkflowRunPayload = {},
+): Promise<WorkflowRunResponse> {
+  const { data } = await api.post<WorkflowRunResponse>(
+    `/api/v1/workflows/executions/${id}/retry`,
+    payload,
+    { timeout: 600_000 },
+  );
+  return data;
+}
