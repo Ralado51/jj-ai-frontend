@@ -6,13 +6,24 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { AgentDescriptor, AgentOrchestrationResponse, AgentOrchestrationStep, listAgents, orchestrateAgents } from "@/lib/agents";
 import { listProjects, Project } from "@/lib/projects";
-import { archiveWorkflow, createWorkflow, listWorkflows, PersistedWorkflow, runPersistedWorkflow, updateWorkflow } from "@/lib/workflows";
+import {
+  archiveWorkflow,
+  createWorkflow,
+  getWorkflowExecution,
+  listWorkflows,
+  PersistedWorkflow,
+  runPersistedWorkflowAsync,
+  updateWorkflow,
+  WorkflowExecution,
+} from "@/lib/workflows";
 
 type BuilderStep = AgentOrchestrationStep & { id: string };
 type LegacyWorkflow = { id: string; name: string; steps: AgentOrchestrationStep[] };
 
 const STORAGE_KEY = "jj-ai-saved-workflows";
 const MIGRATION_KEY = "jj-ai-workflows-migrated-v1";
+const POLLING_INTERVAL_MS = 2_000;
+const POLLING_TIMEOUT_MS = 15 * 60_000;
 
 function newStep(agentId = "general"): BuilderStep {
   return { id: crypto.randomUUID(), agent_id: agentId, instruction: "" };
@@ -20,6 +31,10 @@ function newStep(agentId = "general"): BuilderStep {
 
 function normalizedSteps(steps: BuilderStep[]): AgentOrchestrationStep[] {
   return steps.map(({ agent_id, instruction }) => ({ agent_id, instruction: instruction?.trim() || undefined }));
+}
+
+function isTerminalStatus(status: string) {
+  return status === "completed" || status === "failed";
 }
 
 export default function WorkflowsPage() {
@@ -34,6 +49,7 @@ export default function WorkflowsPage() {
   const [useMemory, setUseMemory] = useState(true);
   const [workflowName, setWorkflowName] = useState("");
   const [result, setResult] = useState<AgentOrchestrationResponse | null>(null);
+  const [execution, setExecution] = useState<WorkflowExecution | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
@@ -135,6 +151,7 @@ export default function WorkflowsPage() {
     setUseMemory(item.use_memory);
     setSteps(item.steps.map((step) => ({ ...step, id: crypto.randomUUID(), instruction: step.instruction ?? "" })));
     setResult(null);
+    setExecution(null);
     setError("");
   }
 
@@ -147,6 +164,7 @@ export default function WorkflowsPage() {
     setUseMemory(true);
     setSteps([newStep(agents[0]?.id ?? "general")]);
     setResult(null);
+    setExecution(null);
   }
 
   async function deleteWorkflow(id: string) {
@@ -159,20 +177,37 @@ export default function WorkflowsPage() {
     }
   }
 
+  async function followExecution(executionId: string) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < POLLING_TIMEOUT_MS) {
+      const current = await getWorkflowExecution(executionId);
+      setExecution(current);
+      if (isTerminalStatus(current.status)) return current;
+      await new Promise((resolve) => window.setTimeout(resolve, POLLING_INTERVAL_MS));
+    }
+    throw new Error("A execução continua em andamento. Consulte o Execution Center para acompanhar.");
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setResult(null);
+    setExecution(null);
     if (requiresProject && !projectId) return setError("Selecione um projeto porque o pipeline contém o agente RAG.");
     setRunning(true);
     try {
       if (selectedWorkflowId) {
-        const response = await runPersistedWorkflow(selectedWorkflowId, {
+        const queued = await runPersistedWorkflowAsync(selectedWorkflowId, {
           instruction: instruction.trim() || undefined,
           project_id: requiresProject ? projectId || null : null,
           session_key: sessionKey.trim() || null,
           use_memory: useMemory,
         });
-        setResult(response);
+        setExecution(queued);
+        const completed = await followExecution(queued.id);
+        if (completed.status === "failed") {
+          setError(completed.error_message ?? "O workflow falhou durante a execução em background.");
+        }
       } else {
         setResult(await orchestrateAgents({
           instruction,
@@ -184,11 +219,16 @@ export default function WorkflowsPage() {
       }
     } catch (requestError) {
       const axiosError = requestError as AxiosError<{ detail?: string }>;
-      setError(axiosError.response?.data?.detail ?? "Não foi possível executar o workflow.");
+      setError(
+        axiosError.response?.data?.detail
+          ?? (requestError instanceof Error ? requestError.message : "Não foi possível executar o workflow."),
+      );
     } finally {
       setRunning(false);
     }
   }
+
+  const executionInProgress = execution && !isTerminalStatus(execution.status);
 
   return <DashboardShell><section className="mx-auto max-w-[1500px] space-y-6">
     <header className="rounded-3xl border bg-surface p-6 shadow-glow md:p-8"><div className="flex gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/15 text-secondary"><Workflow /></div><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-secondary">Multi-Agent</p><h1 className="mt-2 text-3xl font-bold">Workflow Builder</h1><p className="mt-2 text-sm text-muted">Monte, salve e execute pipelines multiagente sincronizados com sua conta.</p></div></div></header>
@@ -200,8 +240,11 @@ export default function WorkflowsPage() {
         <div className="space-y-3">{steps.map((step, index) => <div key={step.id}><article className="rounded-2xl border bg-background p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">Etapa {index + 1}</p><p className="font-semibold">{agents.find((item) => item.id === step.agent_id)?.name ?? step.agent_id}</p></div><div className="flex gap-1"><button type="button" onClick={() => moveStep(index, -1)} disabled={index === 0} className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-30"><ChevronUp size={16} /></button><button type="button" onClick={() => moveStep(index, 1)} disabled={index === steps.length - 1} className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-30"><ChevronDown size={16} /></button><button type="button" onClick={() => removeStep(step.id)} disabled={steps.length === 1} className="grid h-9 w-9 place-items-center rounded-lg border disabled:opacity-30"><Trash2 size={16} /></button></div></div><div className="mt-4 grid gap-3"><select value={step.agent_id} onChange={(event) => updateStep(step.id, { agent_id: event.target.value })} className="h-11 rounded-xl border bg-surface px-3">{agents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><textarea value={step.instruction ?? ""} onChange={(event) => updateStep(step.id, { instruction: event.target.value })} className="min-h-24 rounded-xl border bg-surface p-3 text-sm" placeholder="Instrução opcional desta etapa" /></div></article>{index < steps.length - 1 ? <div className="grid h-10 place-items-center text-muted"><ArrowDown size={18} /></div> : null}</div>)}</div>
         <button type="button" onClick={addStep} disabled={steps.length >= 6} className="inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-semibold disabled:opacity-40"><Plus size={17} /> Adicionar etapa</button>
         {error ? <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p> : null}
-        <button disabled={running} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary font-semibold text-white disabled:opacity-60">{running ? <LoaderCircle className="animate-spin" size={18} /> : <Play size={18} />}{running ? "Executando pipeline..." : selectedWorkflowId ? "Executar workflow salvo" : "Executar workflow"}</button>
+        <button disabled={running} className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary font-semibold text-white disabled:opacity-60">{running ? <LoaderCircle className="animate-spin" size={18} /> : <Play size={18} />}{running ? (executionInProgress ? `Executando em background: ${execution.status}` : "Iniciando execução...") : selectedWorkflowId ? "Executar workflow salvo" : "Executar workflow"}</button>
       </form>
+
+      {execution ? <section className="space-y-4 rounded-2xl border bg-surface p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase text-secondary">Execução assíncrona</p><h2 className="mt-1 text-xl font-bold">{execution.workflow_name}</h2></div><span className="rounded-full border px-3 py-1 text-xs">{execution.status}</span></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl bg-background p-3 text-sm"><p className="text-xs text-muted">Etapas</p><p className="mt-1 font-semibold">{execution.steps_completed}/{execution.steps_total}</p></div><div className="rounded-xl bg-background p-3 text-sm"><p className="text-xs text-muted">Duração</p><p className="mt-1 font-semibold">{(execution.total_duration_ms / 1000).toFixed(2)} s</p></div><div className="rounded-xl bg-background p-3 text-sm"><p className="text-xs text-muted">ID</p><p className="mt-1 truncate font-mono text-xs">{execution.id}</p></div></div>{executionInProgress ? <p className="inline-flex items-center gap-2 rounded-xl border border-secondary/30 bg-secondary/10 p-3 text-sm"><LoaderCircle size={16} className="animate-spin" /> A página consulta o backend a cada 2 segundos. Você pode acompanhar também no Execution Center.</p> : null}{execution.step_details?.map((step, index) => <article key={`${step.agent_id}-${index}`} className="rounded-xl border bg-background p-4"><div className="flex justify-between gap-2"><p className="font-semibold">{index + 1}. {step.agent_name}</p><span className="text-xs text-muted">{step.model}</span></div><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted">{step.content}</p></article>)}{execution.final_content ? <div className="rounded-xl bg-background p-4"><p className="text-xs font-semibold uppercase text-secondary">Conteúdo final</p><div className="mt-3 whitespace-pre-wrap text-sm leading-7">{execution.final_content}</div></div> : null}</section> : null}
+
       {result ? <section className="space-y-4 rounded-2xl border bg-surface p-5"><div className="flex justify-between gap-3"><h2 className="text-xl font-bold">Resultado</h2><span className="rounded-full border px-3 py-1 text-xs">{(result.total_duration_ms / 1000).toFixed(2)} s</span></div>{result.steps.map((item, index) => <article key={`${item.agent.id}-${index}`} className="rounded-xl border bg-background p-4"><div className="flex justify-between gap-2"><p className="font-semibold">{index + 1}. {item.agent.name}</p><span className="text-xs text-muted">{item.model}</span></div><p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted">{item.content}</p></article>)}<div className="rounded-xl bg-background p-4"><p className="text-xs font-semibold uppercase text-secondary">Conteúdo final</p><div className="mt-3 whitespace-pre-wrap text-sm leading-7">{result.final_content}</div></div></section> : null}</div>
       <aside className="h-fit space-y-4 rounded-2xl border bg-surface p-5 xl:sticky xl:top-24"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Workflows salvos</h2><p className="mt-1 text-xs text-muted">Sincronizados no backend.</p></div><button type="button" onClick={newWorkflow} className="rounded-lg border px-3 py-2 text-xs">Novo</button></div><div className="flex gap-2"><input value={workflowName} onChange={(event) => setWorkflowName(event.target.value)} className="h-11 min-w-0 flex-1 rounded-xl border bg-background px-3 text-sm" placeholder="Nome do workflow" /><button type="button" onClick={saveCurrentWorkflow} disabled={saving} className="grid h-11 w-11 place-items-center rounded-xl border disabled:opacity-50">{saving ? <LoaderCircle className="animate-spin" size={17} /> : <Save size={17} />}</button></div><div className="space-y-2">{saved.length ? saved.map((item) => <div key={item.id} className={`rounded-xl border p-3 ${item.id === selectedWorkflowId ? "border-primary/50 bg-primary/10" : "bg-background"}`}><button type="button" onClick={() => loadWorkflow(item)} className="w-full text-left"><p className="font-medium">{item.name}</p><p className="mt-1 text-xs text-muted">{item.steps.length} etapa(s) · {new Date(item.updated_at).toLocaleDateString("pt-BR")}</p></button><button type="button" onClick={() => deleteWorkflow(item.id)} className="mt-3 inline-flex items-center gap-2 text-xs text-red-300"><Trash2 size={14} /> Arquivar</button></div>) : <p className="rounded-xl border border-dashed p-4 text-sm text-muted">Nenhum workflow salvo.</p>}</div></aside>
     </div>}
