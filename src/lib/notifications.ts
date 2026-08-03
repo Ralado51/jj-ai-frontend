@@ -15,11 +15,29 @@ export type NotificationItem = {
 export type NotificationList = {
   items: NotificationItem[];
   unread_count: number;
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
 };
 
-export async function getNotifications(unreadOnly = false, limit = 20): Promise<NotificationList> {
+export type NotificationFilters = {
+  page?: number;
+  pageSize?: number;
+  unreadOnly?: boolean;
+  severity?: string;
+  type?: string;
+};
+
+export async function getNotifications(filters: NotificationFilters = {}): Promise<NotificationList> {
   const { data } = await api.get<NotificationList>("/api/v1/notifications", {
-    params: { unread_only: unreadOnly, limit },
+    params: {
+      page: filters.page ?? 1,
+      page_size: filters.pageSize ?? 20,
+      unread_only: filters.unreadOnly ?? false,
+      ...(filters.severity ? { severity: filters.severity } : {}),
+      ...(filters.type ? { type: filters.type } : {}),
+    },
   });
   return data;
 }
