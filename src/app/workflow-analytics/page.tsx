@@ -1,16 +1,19 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Clock3, HeartPulse, Info, LineChart, LoaderCircle, RefreshCw, RotateCcw, Save, Workflow } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CheckCircle2, Clock3, HeartPulse, Info, LineChart, LoaderCircle, RefreshCw, RotateCcw, Save, TrendingDown, Workflow } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DashboardShell } from "@/components/dashboard-shell";
 import {
   createWorkflowHealthSnapshot,
   getWorkflowAnalytics,
   getWorkflowHealthHistory,
+  getWorkflowHealthRegressions,
   getWorkflowInsights,
   WorkflowAnalytics,
   WorkflowHealthHistory,
   WorkflowHealthHistoryItem,
+  WorkflowHealthRegression,
+  WorkflowHealthRegressions,
   WorkflowInsight,
   WorkflowInsights,
   WorkflowRecommendation,
@@ -20,6 +23,7 @@ export default function WorkflowAnalyticsPage() {
   const [data, setData] = useState<WorkflowAnalytics | null>(null);
   const [insights, setInsights] = useState<WorkflowInsights | null>(null);
   const [history, setHistory] = useState<WorkflowHealthHistory | null>(null);
+  const [regressions, setRegressions] = useState<WorkflowHealthRegressions | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState("all");
   const [loading, setLoading] = useState(true);
   const [savingSnapshot, setSavingSnapshot] = useState(false);
@@ -30,14 +34,16 @@ export default function WorkflowAnalyticsPage() {
     setLoading(true);
     setError("");
     try {
-      const [analyticsData, insightsData, historyData] = await Promise.all([
+      const [analyticsData, insightsData, historyData, regressionData] = await Promise.all([
         getWorkflowAnalytics(),
         getWorkflowInsights(),
         getWorkflowHealthHistory(undefined, 180),
+        getWorkflowHealthRegressions(),
       ]);
       setData(analyticsData);
       setInsights(insightsData);
       setHistory(historyData);
+      setRegressions(regressionData);
     } catch {
       setError("Não foi possível carregar os analytics, insights e histórico de saúde.");
     } finally {
@@ -51,7 +57,12 @@ export default function WorkflowAnalyticsPage() {
     setMessage("");
     try {
       await createWorkflowHealthSnapshot(selectedWorkflow === "all" ? undefined : selectedWorkflow);
-      setHistory(await getWorkflowHealthHistory(undefined, 180));
+      const [historyData, regressionData] = await Promise.all([
+        getWorkflowHealthHistory(undefined, 180),
+        getWorkflowHealthRegressions(),
+      ]);
+      setHistory(historyData);
+      setRegressions(regressionData);
       setMessage("Snapshot de saúde atualizado com sucesso.");
     } catch {
       setError("Não foi possível salvar o snapshot de saúde.");
@@ -67,6 +78,11 @@ export default function WorkflowAnalyticsPage() {
     const filtered = selectedWorkflow === "all" ? items : items.filter((item) => item.workflow_id === selectedWorkflow);
     return [...filtered].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
   }, [history, selectedWorkflow]);
+
+  const regressionItems = useMemo(() => {
+    const items = regressions?.items ?? [];
+    return selectedWorkflow === "all" ? items : items.filter((item) => item.workflow_id === selectedWorkflow);
+  }, [regressions, selectedWorkflow]);
 
   const workflowOptions = insights?.workflows ?? [];
 
@@ -93,6 +109,11 @@ export default function WorkflowAnalyticsPage() {
       </div>
 
       <section className="rounded-2xl border bg-surface p-5">
+        <div className="flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-3"><TrendingDown size={20} className="text-secondary" /><div><h2 className="text-xl font-bold">Alertas de regressão</h2><p className="text-sm text-muted">Quedas relevantes entre os dois snapshots mais recentes de cada workflow.</p></div></div><span className="rounded-full border px-3 py-1 text-xs font-semibold">{regressionItems.length} alerta(s)</span></div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-2">{regressionItems.length ? regressionItems.map((item) => <RegressionAlert key={`${item.workflow_id}-${item.current_date}`} item={item} />) : <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300"><div className="flex items-center gap-2"><CheckCircle2 size={18} /><span>Nenhuma regressão relevante detectada.</span></div></div>}</div>
+      </section>
+
+      <section className="rounded-2xl border bg-surface p-5">
         <div className="flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-3"><LineChart size={20} className="text-secondary" /><div><h2 className="text-xl font-bold">Evolução do Health Score</h2><p className="text-sm text-muted">Snapshots diários para identificar melhorias e regressões.</p></div></div><label className="grid gap-1 text-xs font-semibold text-muted">Workflow<select value={selectedWorkflow} onChange={(event) => setSelectedWorkflow(event.target.value)} className="h-10 min-w-[260px] rounded-xl border bg-background px-3 text-sm font-normal text-foreground"><option value="all">Todos os workflows</option>{workflowOptions.map((item) => <option key={item.workflow_id} value={item.workflow_id}>{item.workflow_name}</option>)}</select></label></div>
         <div className="mt-5"><HealthTrendChart items={historyItems} /></div>
       </section>
@@ -110,6 +131,13 @@ export default function WorkflowAnalyticsPage() {
       <section className="rounded-2xl border bg-surface p-5"><h2 className="text-xl font-bold">Principais pontos de falha</h2><div className="mt-4 grid gap-3 lg:grid-cols-2">{data.failure_points.length ? data.failure_points.map((item, index) => <article key={`${item.workflow_name}-${item.step}-${index}`} className="rounded-xl border bg-background p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-semibold">{item.workflow_name}</p><p className="text-xs text-muted">Etapa {item.step}</p></div><span className="rounded-full border px-2.5 py-1 text-xs">{item.occurrences} ocorrência(s)</span></div><p className="mt-3 text-sm text-red-300">{item.error_message}</p></article>) : <p className="text-sm text-muted">Nenhuma falha registrada.</p>}</div></section>
     </> : null}
   </section></DashboardShell>;
+}
+
+function RegressionAlert({ item }: { item: WorkflowHealthRegression }) {
+  const critical = item.severity === "critical";
+  const Icon = critical ? AlertOctagon : AlertTriangle;
+  const tone = critical ? "border-red-500/40 bg-red-500/10" : "border-amber-500/40 bg-amber-500/10";
+  return <article className={`rounded-xl border p-4 ${tone}`}><div className="flex items-start gap-3"><Icon size={20} className="mt-0.5 shrink-0" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><p className="font-semibold">{item.workflow_name}</p><span className="rounded-full border px-2.5 py-1 text-xs font-semibold uppercase">{critical ? "Crítica" : "Atenção"}</span></div><p className="mt-2 text-sm">Health Score caiu de <strong>{item.previous_score}</strong> para <strong>{item.current_score}</strong> ({item.delta} pontos).</p><p className="mt-1 text-xs text-muted">{formatDate(item.previous_date)} → {formatDate(item.current_date)}</p></div></div></article>;
 }
 
 function HealthTrendChart({ items }: { items: WorkflowHealthHistoryItem[] }) {

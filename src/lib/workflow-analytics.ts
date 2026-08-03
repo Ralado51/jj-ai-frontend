@@ -85,6 +85,21 @@ export type WorkflowHealthHistory = {
   items: WorkflowHealthHistoryItem[];
 };
 
+export type WorkflowHealthRegression = {
+  workflow_id: string;
+  workflow_name: string;
+  previous_date: string;
+  current_date: string;
+  previous_score: number;
+  current_score: number;
+  delta: number;
+  severity: "warning" | "critical";
+};
+
+export type WorkflowHealthRegressions = {
+  items: WorkflowHealthRegression[];
+};
+
 export async function getWorkflowAnalytics(workflowId?: string): Promise<WorkflowAnalytics> {
   const { data } = await api.get<WorkflowAnalytics>("/api/v1/analytics/workflows", {
     params: workflowId ? { workflow_id: workflowId } : undefined,
@@ -111,6 +126,13 @@ export async function getWorkflowHealthHistory(workflowId?: string, limit = 90):
 
 export async function createWorkflowHealthSnapshot(workflowId?: string): Promise<WorkflowHealthHistory> {
   const { data } = await api.post<WorkflowHealthHistory>("/api/v1/analytics/workflows/health/snapshot", undefined, {
+    params: workflowId ? { workflow_id: workflowId } : undefined,
+  });
+  return data;
+}
+
+export async function getWorkflowHealthRegressions(workflowId?: string): Promise<WorkflowHealthRegressions> {
+  const { data } = await api.get<WorkflowHealthRegressions>("/api/v1/analytics/workflows/health/regressions", {
     params: workflowId ? { workflow_id: workflowId } : undefined,
   });
   return data;
