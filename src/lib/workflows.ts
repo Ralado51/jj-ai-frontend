@@ -42,6 +42,14 @@ export type WorkflowRunResponse = AgentOrchestrationResponse & {
   use_memory?: boolean;
 };
 
+export type WorkflowExecutionStatus =
+  | "pending"
+  | "running"
+  | "cancelling"
+  | "cancelled"
+  | "completed"
+  | "failed";
+
 export type WorkflowExecutionStepDetail = {
   position: number;
   agent_execution_id: string | null;
@@ -62,7 +70,7 @@ export type WorkflowExecution = {
   workflow_id: string;
   project_id: string | null;
   workflow_name: string;
-  status: "pending" | "running" | "completed" | "failed" | string;
+  status: WorkflowExecutionStatus | string;
   instruction: string;
   session_key: string | null;
   use_memory: boolean;
@@ -75,6 +83,10 @@ export type WorkflowExecution = {
   created_at: string;
   updated_at: string;
 };
+
+export function isWorkflowExecutionActive(status: string): boolean {
+  return status === "pending" || status === "running" || status === "cancelling";
+}
 
 export async function listWorkflows(projectId?: string): Promise<PersistedWorkflow[]> {
   const { data } = await api.get<PersistedWorkflow[]>("/api/v1/workflows", {
@@ -125,6 +137,11 @@ export async function getWorkflowExecution(id: string): Promise<WorkflowExecutio
   return data;
 }
 
+export async function cancelWorkflowExecution(id: string): Promise<WorkflowExecution> {
+  const { data } = await api.post<WorkflowExecution>(`/api/v1/workflows/executions/${id}/cancel`);
+  return data;
+}
+
 export async function waitForWorkflowExecution(
   id: string,
   options: { intervalMs?: number; timeoutMs?: number } = {},
@@ -135,7 +152,7 @@ export async function waitForWorkflowExecution(
 
   while (Date.now() - startedAt < timeoutMs) {
     const execution = await getWorkflowExecution(id);
-    if (execution.status === "completed" || execution.status === "failed") return execution;
+    if (!isWorkflowExecutionActive(execution.status)) return execution;
     await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
   }
 
