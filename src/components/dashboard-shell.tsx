@@ -28,6 +28,7 @@ const navigation = [
   { label: "AI Apps", icon: Sparkles, href: "/ai-apps" },
   { label: "Benchmark", icon: FlaskConical, href: "/benchmark" },
   { label: "AI Analytics", icon: BarChart3, href: "/analytics" },
+  { label: "Workflow Analytics", icon: BarChart3, href: "/workflow-analytics" },
   { label: "Documentos", icon: FileText },
   { label: "Agentes", icon: Bot, href: "/agents" },
   { label: "Workflows", icon: Workflow, href: "/workflows" },
