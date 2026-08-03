@@ -19,6 +19,7 @@ import {
   isWorkflowExecutionActive,
   listWorkflowExecutions,
   retryWorkflowExecution,
+  retryWorkflowExecutionFromStep,
   WorkflowExecution,
 } from "@/lib/workflows";
 
@@ -53,6 +54,7 @@ export default function WorkflowExecutionsPage() {
   const [loading, setLoading] = useState(true);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [retryingStep, setRetryingStep] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -117,6 +119,23 @@ export default function WorkflowExecutionsPage() {
     }
   }
 
+  async function retryFromStep(step: number) {
+    if (!selected || isWorkflowExecutionActive(selected.status)) return;
+    setRetryingStep(step);
+    setError("");
+    setSuccess("");
+    try {
+      const execution = await retryWorkflowExecutionFromStep(selected.id, { step });
+      setSuccess(`Nova execução iniciada a partir da etapa ${step}.`);
+      await refresh(execution.id);
+    } catch (requestError) {
+      const axiosError = requestError as AxiosError<{ detail?: string }>;
+      setError(axiosError.response?.data?.detail ?? `Não foi possível reexecutar a partir da etapa ${step}.`);
+    } finally {
+      setRetryingStep(null);
+    }
+  }
+
   async function cancelSelected() {
     if (!selected || !isWorkflowExecutionActive(selected.status) || selected.status === "cancelling") return;
     setCancelling(true);
@@ -125,11 +144,9 @@ export default function WorkflowExecutionsPage() {
     try {
       const execution = await cancelWorkflowExecution(selected.id);
       setSelected(execution);
-      setSuccess(
-        execution.status === "cancelled"
-          ? "Execução cancelada."
-          : "Cancelamento solicitado. O agente atual será concluído antes da interrupção.",
-      );
+      setSuccess(execution.status === "cancelled"
+        ? "Execução cancelada."
+        : "Cancelamento solicitado. O agente atual será concluído antes da interrupção.");
       await refresh(execution.id, true);
     } catch (requestError) {
       const axiosError = requestError as AxiosError<{ detail?: string }>;
@@ -138,6 +155,11 @@ export default function WorkflowExecutionsPage() {
       setCancelling(false);
     }
   }
+
+  const canRetry = selected ? !isWorkflowExecutionActive(selected.status) : false;
+  const nextStep = selected && selected.steps_completed < selected.steps_total
+    ? selected.steps_completed + 1
+    : null;
 
   return <DashboardShell><section className="mx-auto max-w-[1500px] space-y-6">
     <header className="rounded-3xl border bg-surface p-6 shadow-glow md:p-8">
@@ -167,13 +189,14 @@ export default function WorkflowExecutionsPage() {
           <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-secondary">Execução</p><h2 className="mt-1 text-xl font-bold">{selected.workflow_name}</h2></div><StatusIcon status={selected.status} /></div>
           <div className="grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => void cancelSelected()} disabled={cancelling || !isWorkflowExecutionActive(selected.status) || selected.status === "cancelling"} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-amber-500/40 text-amber-300 disabled:cursor-not-allowed disabled:opacity-40">{cancelling ? <LoaderCircle className="animate-spin" size={17} /> : <Ban size={17} />}{selected.status === "cancelling" ? "Cancelando..." : "Cancelar execução"}</button>
-            <button type="button" onClick={() => void retrySelected()} disabled={retrying || isWorkflowExecutionActive(selected.status)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border font-semibold disabled:cursor-not-allowed disabled:opacity-50">{retrying ? <LoaderCircle className="animate-spin" size={17} /> : <RotateCcw size={17} />}{retrying ? "Executando novamente..." : "Tentar novamente"}</button>
+            <button type="button" onClick={() => void retrySelected()} disabled={retrying || !canRetry || retryingStep !== null} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border font-semibold disabled:cursor-not-allowed disabled:opacity-50">{retrying ? <LoaderCircle className="animate-spin" size={17} /> : <RotateCcw size={17} />}{retrying ? "Executando novamente..." : "Reexecutar tudo"}</button>
           </div>
+          {nextStep && canRetry ? <button type="button" onClick={() => void retryFromStep(nextStep)} disabled={retryingStep !== null || retrying} className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary/15 font-semibold text-secondary disabled:opacity-50">{retryingStep === nextStep ? <LoaderCircle className="animate-spin" size={17} /> : <RotateCcw size={17} />}Continuar da etapa {nextStep}</button> : null}
           {selected.status === "cancelling" ? <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">O agente atual será concluído. O workflow será interrompido antes da próxima etapa.</p> : null}
           <div className="grid grid-cols-2 gap-3 text-sm"><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Status</p><p className="mt-1 font-semibold">{statusLabel(selected.status)}</p></div><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Duração</p><p className="mt-1 font-semibold">{(selected.total_duration_ms / 1000).toFixed(2)} s</p></div><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Etapas</p><p className="mt-1 font-semibold">{selected.steps_completed}/{selected.steps_total}</p></div><div className="rounded-xl bg-background p-3"><p className="text-xs text-muted">Memória</p><p className="mt-1 font-semibold">{selected.use_memory ? "Ativa" : "Desativada"}</p></div></div>
           <div><p className="text-xs font-semibold uppercase tracking-wide text-muted">Instrução</p><p className="mt-2 whitespace-pre-wrap rounded-xl bg-background p-3 text-sm leading-6">{selected.instruction}</p></div>
           {selected.error_message ? <div><p className="text-xs font-semibold uppercase tracking-wide text-red-300">Erro</p><p className="mt-2 rounded-xl bg-red-500/10 p-3 text-sm text-red-200">{selected.error_message}</p></div> : null}
-          <div><p className="text-xs font-semibold uppercase tracking-wide text-secondary">Etapas executadas</p>{selected.step_details.length ? <div className="mt-3 space-y-3">{selected.step_details.map((step) => <article key={`${step.position}-${step.agent_id}`} className="rounded-xl border bg-background p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">Etapa {step.position}</p><p className="font-semibold">{step.agent_name}</p><p className="mt-1 text-xs text-muted">{step.task_type}</p></div><span className="rounded-full border px-2.5 py-1 text-xs">{(step.duration_ms / 1000).toFixed(2)} s</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg border p-2"><p className="text-muted">Modelo</p><p className="mt-1 break-all font-medium">{step.model}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Provider</p><p className="mt-1 font-medium">{step.provider}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Seleção</p><p className="mt-1 font-medium">{sourceLabel(step.model_selection_source)}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Memória usada</p><p className="mt-1 font-medium">{step.memory_items_used} item(ns)</p></div></div><details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-secondary">Ver resposta da etapa</summary><div className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border p-3 text-xs leading-5">{step.content}</div></details></article>)}</div> : <p className="mt-2 rounded-xl border border-dashed p-3 text-sm text-muted">Nenhuma etapa concluída até o momento.</p>}</div>
+          <div><p className="text-xs font-semibold uppercase tracking-wide text-secondary">Etapas executadas</p>{selected.step_details.length ? <div className="mt-3 space-y-3">{selected.step_details.map((step) => <article key={`${step.position}-${step.agent_id}`} className="rounded-xl border bg-background p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted">Etapa {step.position}</p><p className="font-semibold">{step.agent_name}</p><p className="mt-1 text-xs text-muted">{step.task_type}</p></div><span className="rounded-full border px-2.5 py-1 text-xs">{(step.duration_ms / 1000).toFixed(2)} s</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg border p-2"><p className="text-muted">Modelo</p><p className="mt-1 break-all font-medium">{step.model}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Provider</p><p className="mt-1 font-medium">{step.provider}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Seleção</p><p className="mt-1 font-medium">{sourceLabel(step.model_selection_source)}</p></div><div className="rounded-lg border p-2"><p className="text-muted">Memória usada</p><p className="mt-1 font-medium">{step.memory_items_used} item(ns)</p></div></div><details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-secondary">Ver resposta da etapa</summary><div className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border p-3 text-xs leading-5">{step.content}</div></details>{canRetry ? <button type="button" onClick={() => void retryFromStep(step.position)} disabled={retryingStep !== null || retrying} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border text-xs font-semibold disabled:opacity-50">{retryingStep === step.position ? <LoaderCircle className="animate-spin" size={14} /> : <RotateCcw size={14} />}Reexecutar a partir daqui</button> : null}</article>)}</div> : <p className="mt-2 rounded-xl border border-dashed p-3 text-sm text-muted">Nenhuma etapa concluída até o momento.</p>}</div>
           {selected.final_content ? <div><p className="text-xs font-semibold uppercase tracking-wide text-secondary">Conteúdo final ou parcial</p><div className="mt-2 max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl bg-background p-3 text-sm leading-6">{selected.final_content}</div></div> : null}
           <p className="flex items-center gap-2 text-xs text-muted"><Clock3 size={14} /> Atualizada em {new Date(selected.updated_at).toLocaleString("pt-BR")}</p>
         </div> : <p className="text-sm text-muted">Selecione uma execução para ver os detalhes.</p>}
