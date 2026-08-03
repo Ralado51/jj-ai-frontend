@@ -80,6 +80,8 @@ export type WorkflowExecution = {
   final_content: string | null;
   error_message: string | null;
   step_details: WorkflowExecutionStepDetail[];
+  parent_execution_id: string | null;
+  retry_from_step: number | null;
   created_at: string;
   updated_at: string;
 };
