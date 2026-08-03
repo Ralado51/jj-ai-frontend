@@ -84,6 +84,10 @@ export type WorkflowExecution = {
   updated_at: string;
 };
 
+export type RetryWorkflowFromStepPayload = WorkflowRunPayload & {
+  step: number;
+};
+
 export function isWorkflowExecutionActive(status: string): boolean {
   return status === "pending" || status === "running" || status === "cancelling";
 }
@@ -167,6 +171,17 @@ export async function retryWorkflowExecution(
     `/api/v1/workflows/executions/${id}/retry`,
     payload,
     { timeout: 600_000 },
+  );
+  return data;
+}
+
+export async function retryWorkflowExecutionFromStep(
+  id: string,
+  payload: RetryWorkflowFromStepPayload,
+): Promise<WorkflowExecution> {
+  const { data } = await api.post<WorkflowExecution>(
+    `/api/v1/workflows/executions/${id}/retry-from-step`,
+    payload,
   );
   return data;
 }
