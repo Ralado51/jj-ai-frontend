@@ -62,7 +62,7 @@ export type WorkflowExecution = {
   workflow_id: string;
   project_id: string | null;
   workflow_name: string;
-  status: "running" | "completed" | "failed" | string;
+  status: "pending" | "running" | "completed" | "failed" | string;
   instruction: string;
   session_key: string | null;
   use_memory: boolean;
@@ -105,6 +105,14 @@ export async function runPersistedWorkflow(id: string, payload: WorkflowRunPaylo
   return data;
 }
 
+export async function runPersistedWorkflowAsync(
+  id: string,
+  payload: WorkflowRunPayload,
+): Promise<WorkflowExecution> {
+  const { data } = await api.post<WorkflowExecution>(`/api/v1/workflows/${id}/run/async`, payload);
+  return data;
+}
+
 export async function listWorkflowExecutions(workflowId?: string, limit = 50): Promise<WorkflowExecution[]> {
   const { data } = await api.get<WorkflowExecution[]>("/api/v1/workflows/executions", {
     params: { workflow_id: workflowId || undefined, limit },
@@ -115,6 +123,23 @@ export async function listWorkflowExecutions(workflowId?: string, limit = 50): P
 export async function getWorkflowExecution(id: string): Promise<WorkflowExecution> {
   const { data } = await api.get<WorkflowExecution>(`/api/v1/workflows/executions/${id}`);
   return data;
+}
+
+export async function waitForWorkflowExecution(
+  id: string,
+  options: { intervalMs?: number; timeoutMs?: number } = {},
+): Promise<WorkflowExecution> {
+  const intervalMs = options.intervalMs ?? 2_000;
+  const timeoutMs = options.timeoutMs ?? 15 * 60_000;
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const execution = await getWorkflowExecution(id);
+    if (execution.status === "completed" || execution.status === "failed") return execution;
+    await new Promise((resolve) => window.setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error("A execução continua em andamento após o tempo máximo de acompanhamento.");
 }
 
 export async function retryWorkflowExecution(
