@@ -66,6 +66,25 @@ export type WorkflowInsights = {
   workflows: WorkflowInsight[];
 };
 
+export type WorkflowHealthHistoryItem = {
+  id: string;
+  workflow_id: string;
+  workflow_name: string;
+  snapshot_date: string;
+  health_score: number;
+  health_label: string;
+  executions: number;
+  success_rate: number;
+  retry_rate: number;
+  average_duration_ms: number;
+  bottleneck_step?: number | null;
+  bottleneck_share?: number | null;
+};
+
+export type WorkflowHealthHistory = {
+  items: WorkflowHealthHistoryItem[];
+};
+
 export async function getWorkflowAnalytics(workflowId?: string): Promise<WorkflowAnalytics> {
   const { data } = await api.get<WorkflowAnalytics>("/api/v1/analytics/workflows", {
     params: workflowId ? { workflow_id: workflowId } : undefined,
@@ -75,6 +94,23 @@ export async function getWorkflowAnalytics(workflowId?: string): Promise<Workflo
 
 export async function getWorkflowInsights(workflowId?: string): Promise<WorkflowInsights> {
   const { data } = await api.get<WorkflowInsights>("/api/v1/analytics/workflows/insights", {
+    params: workflowId ? { workflow_id: workflowId } : undefined,
+  });
+  return data;
+}
+
+export async function getWorkflowHealthHistory(workflowId?: string, limit = 90): Promise<WorkflowHealthHistory> {
+  const { data } = await api.get<WorkflowHealthHistory>("/api/v1/analytics/workflows/health/history", {
+    params: {
+      ...(workflowId ? { workflow_id: workflowId } : {}),
+      limit,
+    },
+  });
+  return data;
+}
+
+export async function createWorkflowHealthSnapshot(workflowId?: string): Promise<WorkflowHealthHistory> {
+  const { data } = await api.post<WorkflowHealthHistory>("/api/v1/analytics/workflows/health/snapshot", undefined, {
     params: workflowId ? { workflow_id: workflowId } : undefined,
   });
   return data;
