@@ -20,7 +20,7 @@ export function NotificationCenter() {
 
   async function load() {
     try {
-      const data = await getNotifications(false, 20);
+      const data = await getNotifications({ page: 1, pageSize: 20 });
       setItems(data.items);
       setUnreadCount(data.unread_count);
     } finally {
@@ -83,6 +83,7 @@ export function NotificationCenter() {
           </div>
         </Link>)}
       </div>
+      <Link href="/notifications" onClick={() => setOpen(false)} className="block border-t px-4 py-3 text-center text-sm font-semibold text-secondary hover:bg-elevated">Ver todas as notificações</Link>
     </div> : null}
   </div>;
 }

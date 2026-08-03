@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Bell,
   Bot,
   Boxes,
   FileText,
@@ -29,6 +30,7 @@ const navigation = [
   { label: "Benchmark", icon: FlaskConical, href: "/benchmark" },
   { label: "AI Analytics", icon: BarChart3, href: "/analytics" },
   { label: "Workflow Analytics", icon: BarChart3, href: "/workflow-analytics" },
+  { label: "Notificações", icon: Bell, href: "/notifications" },
   { label: "Documentos", icon: FileText },
   { label: "Agentes", icon: Bot, href: "/agents" },
   { label: "Workflows", icon: Workflow, href: "/workflows" },
