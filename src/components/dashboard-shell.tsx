@@ -35,7 +35,7 @@ const navigation = [
   { label: "Agentes", icon: Bot, href: "/agents" },
   { label: "Workflows", icon: Workflow, href: "/workflows" },
   { label: "Execuções", icon: History, href: "/workflow-executions" },
-  { label: "Configurações", icon: Settings },
+  { label: "Configurações", icon: Settings, href: "/settings/notifications" },
 ];
 
 const roleLabels: Record<string, string> = {
