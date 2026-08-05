@@ -33,6 +33,7 @@ const navigation = [
   { label: "AI Analytics", icon: BarChart3, href: "/analytics" },
   { label: "AI Cost Center", icon: DollarSign, href: "/analytics/costs" },
   { label: "Cost Optimizer", icon: Lightbulb, href: "/analytics/optimizer" },
+  { label: "AI Budgets", icon: DollarSign, href: "/analytics/budgets" },
   { label: "Workflow Analytics", icon: BarChart3, href: "/workflow-analytics" },
   { label: "Notificações", icon: Bell, href: "/notifications" },
   { label: "Documentos", icon: FileText },
