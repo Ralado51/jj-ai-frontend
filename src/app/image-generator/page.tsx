@@ -7,7 +7,7 @@ import { DashboardShell } from "@/components/dashboard-shell";
 import { createImageJob, createImageJobsBatch, ImageJob } from "@/lib/image-jobs";
 import { listProjects, Project } from "@/lib/projects";
 
-const DEFAULT_MODEL = "Z-Image-Turbo";
+const DEFAULT_MODEL = "stable-diffusion-v1-5/stable-diffusion-v1-5";
 const DEFAULT_PROVIDER = "free-worker";
 
 export default function ImageGeneratorPage() {
